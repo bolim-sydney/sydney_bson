@@ -1,0 +1,30 @@
+Package: hospitalrating
+Title: Data package of hospital information, survey results, survey questions and hospital infections
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Bolim",
+           family = "Son",
+           role = c("aut", "cre"),
+           email = "bs3222@columbia.edu",
+           comment = c(ORCID = "0000-0001-5926-560X"))
+Description: This package is a data package. There are four different data inside this package, which are hospital information, hospital survey results, survey questions, and hospital infections. This is to show data wrangling process.
+License: CC0
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.1.1
+Imports: 
+    RSelenium,
+    httr,
+    dplyr,
+    tidyr,
+    ggplot2,
+    purrr,
+    stringr,
+    readr,
+    tibble
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat,
+    qpdf
+VignetteBuilder: knitr

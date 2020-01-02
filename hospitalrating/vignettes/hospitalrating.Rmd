@@ -1,0 +1,597 @@
+---
+title: "hospitalrating"
+author: "Bolim Son"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{hospitalrating}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(hospitalrating)
+```
+
+
+### __Project Purpose__
+
+The purpose of this project is to check overall hospital performance of the U.S. hospitals by looking at two parameters: the frequency of infections at a hospital, and patient evaluations of a hospital. By doing so, this project will bring actual performace of a hospital (infections) with perceived performace of a hospital (evaluation). 
+
+Infections will be compared to national average. Highter patient evaluation scores will mean a hospital performs better. The dataset will be cleaned to have a better format. Currently all the assessment criteria is lumped together in the large dataset. It will be grouped by city and state level to see which city or state has good quality hospitals.
+
+The project will involve extensive use of R, to download, clean, merge and visualize the data. Packages such as `RSelenium`, `httr`, `dplyr`, `tidyverse`, `stringr`, `ggplot2`, `purrr` will be used. 
+
+
+### __Dataset Description__
+
+Data used will come from the U.S. Medicare.gov website. Link to U.S. Government's Medicare website is available _[here]_.(https://data.medicare.gov/) This is publicly available data. For this project, three datasets from this database will be examined. 
+
+* Datasets of examination are of below:
+
+  + [Healtcare Associated Infections by Hosptial](https://data.medicare.gov/Hospital-Compare/Healthcare-Associated-Infections-Hospital/77hc-ibv8)
+ 
+This dataset has information on hospital infections.
+
+  + [Patient Survey by Hospital](https://data.medicare.gov/Hospital-Compare/Patient-survey-HCAHPS-Hospital/dgck-syfz)
+
+This dataset has patient survey results.
+
+  + [Hospital General Information](https://data.medicare.gov/Hospital-Compare/Hospital-General-Information/xubh-q36u)
+
+This dataset has general hospital information, which will be used as a reference to double-check all hospital information.
+
+
+### __I. Data Download__
+
+1) API
+There is API available for the three datasets.
+First, I will use API to download the three datasets.
+
+```{r, warning = FALSE, message = FALSE}
+# Use httr package to download from the API
+# Load library
+library(httr)
+
+# Use httr package to retrieve contents
+survey_sample <-content(GET('https://data.medicare.gov/resource/dgck-syfz.csv'))
+infection_sample <- content(GET('https://data.medicare.gov/resource/77hc-ibv8.csv'))
+hospital_sample <- content(GET('https://data.medicare.gov/resource/xubh-q36u.csv'))
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+# Check some information of the data retrieved
+# Make a function
+checkdf <- function(x){
+# Stop if x is not a dataframe
+if(is.data.frame(x) == FALSE) stop("x must be a data frame")
+
+# Create list for storage
+ info <- list() 
+    
+ dim <- dim(x) # dimensions of the dataframe
+ colz <- colnames(x) # column names in the dataframe
+
+# Store information in the list
+ info <- list(dimensions = dim, column_names = colz)
+ 
+# Print out the results
+  return(info)
+}
+```
+
+
+Use the function to check information about API retrieved data
+```{r}
+checkdf(infection_sample)
+```
+
+```{r}
+checkdf(survey_sample)
+```
+
+```{r}
+checkdf(hospital_sample)
+```
+
+The results show that it is only a limited dataset. It only has 1000 rows. 
+To download the whole data, I will download from the web.
+However, I will use the Rselenium package to automate the download process.
+
+```{r, message=FALSE}
+# Load libraries
+library(RSelenium)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(readr)
+```
+
+First, load and check if it runs properly.
+```{r, message = FALSE, eval=FALSE}
+# checkForServer() and startServer() are now default. It automatically begins when RSelenium library is loaded
+
+# Set remote driver
+remDr <- remoteDriver(remoteServerAddr = "localhost" 
+                      , port = 4444
+                      , browserName = "chrome")
+
+# Check status to see if it runs
+remDr$getStatus()
+```
+
+2) R Selenium
+Second, write a `for` loop to download all data from the urls.
+There are three datasets to download. By using RSelenium and searching with xpath, the downloading of the dataset is automated. If one wishes to download more from [data.medicare.gov](http://data.medicare.gov/), one can add more URLs to the list.
+
+```{r, message = FALSE, eval=FALSE}
+# Set url variables
+infection_url <-'https://data.medicare.gov/Hospital-Compare/Healthcare-Associated-Infections-Hospital/77hc-ibv8'
+
+survey_url <- 'https://data.medicare.gov/Hospital-Compare/Patient-survey-HCAHPS-Hospital/dgck-syfz'
+
+hospital_url <- 'https://data.medicare.gov/Hospital-Compare/Hospital-General-Information/xubh-q36u'
+
+urls <- list(infection_url, survey_url, hospital_url)
+```
+
+
+```{r, message = FALSE, eval=FALSE}
+# Connect to the server
+remDr$open()
+
+library(stringr)
+
+i <- 1
+
+# Write a for loop to download all from the urls
+for (i in i:length(urls)){
+  
+    # Navigate to the first website
+remDr$navigate(str_c(urls[i]))
+
+# Set xpath for the first part
+webElem_1 <- remDr$findElement(using = "xpath", '//*[@id="app"]/div/div[1]/div/div/div[1]/div/div[2]/div/div[2]/span')
+
+# Click the first part
+webElem_1$clickElement()
+
+# Set xpath for the second part
+webElem_2 <- remDr$findElement(using = "xpath", '//*[@id="export-flannel"]/section/ul/li[1]/a')
+
+# Click the second part to download
+webElem_2$clickElement()
+}
+```
+
+
+```{r, message = FALSE, eval=FALSE}
+# End the server
+remDr$close()
+remDr$closeServer()
+```
+
+3) Load the raw data, some exploratory data analysis
+
+Load the data into R
+```{r, message=FALSE, warning=FALSE, eval=FALSE}
+# Raw tables saved in the package
+# This is how I initially read it into R
+# Please just see it as a reference
+infection_raw <- readr::read_csv('Healthcare_Associated_Infections_-_Hospital.csv')
+survey_raw <- readr::read_csv('Patient_survey__HCAHPS__-_Hospital.csv')
+hospital_raw <- readr::read_csv('Hospital_General_Information.csv')
+```
+
+Do some exploratory data analysis of the raw data
+```{r}
+# Check the dimensions
+dim(infection_raw)
+dim(survey_raw)
+dim(hospital_raw)
+```
+
+```{r}
+# Create a function that returns number of all unique values in a dataframe
+# Use the function for exploratory data analysis
+uniquevalue <- function(x){
+  if(is.data.frame(x) == FALSE) stop('x must be a data frame')
+  colz <- colnames(x)
+  j <- dim(x)[2]
+  out <- tibble::tibble(columns = colz, values = c(1:j))
+  i <- 1
+
+  for (i in i:j)
+    if(i < 1+j){
+
+      k <- unique(x[, colz[i]])
+
+      if(tibble::is_tibble(k) == TRUE){
+        out[i, 2] <- nrow(k) # number of unique values in i-th column
+      }
+      else{
+        out[i, 2] <- length(k)
+      }
+    }
+  return(out)
+}
+```
+
+Conduct the exploratory data analysis with the new function.
+```{r}
+# Run the function
+uniquevalue(infection_raw)
+uniquevalue(survey_raw)
+uniquevalue(hospital_raw)
+```
+
+```{r}
+# See some values
+head(infection_raw)
+head(survey_raw)
+head(hospital_raw)
+```
+
+
+* Analysis:
+
+   + Some facilities with the same name have different facility IDs. In other words, facility name is not a good reference because there can be different values in it. 
+   
+   + Measure start date and measure end date is the same value for all hospital evaluations. 
+   
+   + There's repetitive information on all three hospital datasets, so for the cleaning, I will remove hospital information from `infection_raw` and `survey_raw` data and use `hospital_raw` data as a reference table.
+   
+   + Questions and answers are clumped together in `survey_raw` so it will be separated and spread out.
+   
+   + There are multiple measures in `infection_raw` table. There are confidence limits, predicted cases, reported cases and so on. Also the scores are difficult to understand without medical knoweldge. 
+   
+
+
+### __2. Data Wrangling__
+
+For data wrangling, `dplyr`, `tidyr`, `stringr`, `purrr` and `readr` packages will be used.
+```{r, message=FALSE}
+# Load libraries
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(readr)
+```
+
+__1) Clean `hospital_raw` dataset__
+
+```{r}
+# Select only columns I need
+# Keep state, city, facility name, and hospital type for referencing information
+hospital <- hospital_raw %>%
+  select('Facility ID':'State', -Address, 'Hospital Type')
+
+# Tidy the column names
+# Replace spaces to underscores
+# Change to all lower cases
+colnames(hospital) <- str_c(colnames(hospital)) %>%
+  map(., str_replace_all, ' ', '_')%>%
+  map(., str_to_lower)
+
+# Check clean hospital dataset
+head(hospital)
+
+```
+
+The clean data is saved as `hospital`. Please use `hospitalrating::hospital` to check it.
+
+
+__2) Clean `infection_raw` dataset__
+   
+```{r}
+# Select only columns I need
+# Remove address, zip code, phone number, footnote and dates
+# Just leave hospital reference code (Facility ID)
+
+infection <- infection_raw %>%
+  select(-Address, -'ZIP Code', -'Phone Number', -Score, -Footnote, -'Measure Start Date', -'Measure End Date', -'Facility Name')
+```
+
+
+`Compared to National` is the variable that will be used to analyze. For `Not Available` values, they will be removed.
+```{r}
+# Tidy the column names
+# Replace spaces to underscores
+# Change to all lower cases
+colnames(infection) <- str_c(colnames(infection)) %>%
+  map(., str_replace_all, ' ', '_')%>%
+  map(., str_to_lower)
+
+# Create a clean dataset
+# A unified dataset that has comparison with national benchmark
+# Each facility receives an average score of all the comparisons it has
+infection <- infection %>%
+  rename(comparison = compared_to_national) %>%
+  filter(comparison != 'Not Available') %>%
+  mutate(comparison = ifelse(comparison == 'Worse than the National Benchmark', 1,
+                             ifelse(comparison == 'No Different than National Benchmark', 2, 3)))%>%
+  group_by(facility_id) %>%
+  summarise(infection_score = mean(comparison))
+
+# Check result
+head(infection)
+```
+
+This is a clean dataset for `infection` data.
+The clean data is saved as `infection`. Please use `hospitalrating::infection` to check it.
+
+__3) Clean `survey_raw` dataset__
+
+Select only facility ID as reference. All other data will be removed because it is available at hospital dataset.
+```{r, message=FALSE}
+# Select only columns I need
+# Just leave hospital reference code (Facility ID), survey question, question description and scores
+
+survey <- survey_raw %>%
+  select('Facility ID', 'HCAHPS Measure ID':'HCAHPS Answer Percent') %>%
+  select(-ends_with('Footnote'))
+
+# Tidy the column names
+# Replace spaces to underscores
+# Change to all lower cases
+colnames(survey) <- str_c(colnames(survey)) %>%
+  map(., str_replace_all, ' ', '_')%>%
+  map(., str_to_lower) %>%
+  map(., str_remove_all, 'hcahps_')
+```
+
+Inspection of the `survey` dataset's `question` column shows that it is composed of three different types of questions, which are star rating, linear mean scores and ones that are "questions" with three different answers (always, usually, sometimes and never). 
+
+Star rating is a 5 scale question, which will be recoded to 3 scale (star_rating * 3 / 5).
+
+For linear mean scores, because they use very different scale out of 100, they will be removed from the analysis. 
+
+For last type that has question and response together("always", "usually" and "sometimes and never"), always will be coded as 3, usually as 2 and sometimes and never as 1. Then, by each question, there will be an average, which will be the final score.
+
+There are questions that have star rating and a response. For example, there is a star rating for clean and a question on "always" clean, "usually" clean, and "sometimes and never" clean. For such cases, after everything has been scaled to 3 score scaling, there will be an average score.
+
+
+__3-1) Clean questions with nested responses__
+
+```{r}
+# Subset dataset for the ease of cleaning
+# Subset for percentage questions
+survey_percent <- survey %>%
+  select(-question, -patient_survey_star_rating,  -answer_description,) %>%
+  filter(answer_percent != 'Not Applicable', answer_percent != 'Not Available') %>%
+  mutate(answer_percent = as.numeric(answer_percent)) 
+
+# Extract questions
+survey_percent$question <- survey_percent$measure_id %>%
+  map(., str_split, "_[A-Z]{1,}_P", simplify = TRUE) %>%
+  map(., `[`, 1) %>% unlist(.)
+
+# Extract answers
+survey_percent$values <- survey_percent$measure_id %>%
+  map(., str_extract, "(SN|U|A)_P") %>% unlist(.)
+
+# Filter only the ones that ask for "percentages"
+# Assign numers to values
+survey_percent <- survey_percent %>%
+  mutate(values = ifelse(values == "A_P", 3,
+                        ifelse(values == "U_P", 2, 1))) %>%
+  filter(!is.na(values)) %>%
+  mutate(values2 = values*(answer_percent/100)) %>%
+  group_by(facility_id, question) %>%
+  summarise(finalvalue = sum(values2)) %>%
+  select(facility_id, question, finalvalue)
+```
+
+
+__3-2) Star rating questions__
+```{r}
+# Subset for star rating questions
+survey_star <- survey %>%
+  select(facility_id, measure_id, patient_survey_star_rating) %>%
+  filter(patient_survey_star_rating != 'Not Applicable', patient_survey_star_rating != 'Not Available') %>%
+  mutate(patient_survey_star_rating = as.numeric(patient_survey_star_rating)) 
+
+# Add a new column that extracts only the questions
+survey_star$question <- survey_star$measure_id %>%
+  map(., str_split, "_STAR_RATING", simplify = TRUE) %>%
+  map(., `[`, 1) %>% unlist(.)
+
+# Clean dataset
+survey_star <- survey_star %>%
+  mutate(value2 = patient_survey_star_rating*3/5) %>%
+  select(-patient_survey_star_rating, -measure_id) %>%
+  group_by(facility_id, question) %>%
+  summarise(finalvalue = mean(value2))
+```
+
+
+__3-3) Merge the two datasets and create a final output__
+```{r}
+# Merge the two clean datasets
+# Spread it out
+library(tidyr)
+
+survey <- rbind(survey_percent, survey_star) %>%
+  group_by(facility_id, question) %>%
+  summarise(value = mean(finalvalue, na.rm = TRUE)) %>% #Because some had both star rating and survey question 
+  spread(key = question, value = value)
+
+# Check the result
+head(survey)
+
+```
+
+```{r}
+# Create a unified mean score for all facilities
+survey$survey_score <- rowMeans(survey[ ,2:24])
+
+# Check the result
+head(survey)
+```
+
+__3-4) Survey question dataset__
+
+Each question is coded, which makes it difficult to understand. The below is a reference table for questions.
+
+```{r}
+# Create a question data.frame for question reference
+# Select only the columns that matter
+survey_q <- survey_raw %>%
+  select('HCAHPS Measure ID', 'HCAHPS Answer Description')%>%
+  rename(code = 'HCAHPS Measure ID', description = 'HCAHPS Answer Description') %>%
+  group_by(code, description) %>%
+  summarise() %>%
+  ungroup()
+
+# Split the code into two parts, split the answer into two parts
+survey_q$code2 <- survey_q$code %>%
+  map(., str_split, "_[A-Z]{1,}_P$|_STAR_RATING|_LINEAR_SCORE", simplify = TRUE) %>%
+  map(., `[`, 1) %>% unlist(.)
+
+# Remove "always", "usually", "sometimes or never" from the responses
+# Remove star rating and linear mean scores
+survey_q$description2 <- survey_q$description %>%
+  map(., str_remove_all, '\\"always\\" |\\"usually\\" |\\"sometimes\\" or \\"never\\" | - linear mean score| - star rating') %>% unlist(.)
+
+# Remove other questions
+survey_q$removes <- survey_q$description2 %>%
+  map(., str_detect, '\\".*\\"') %>% unlist(.)
+
+# Select only variables that are important and remove duplicates
+survey_q <- survey_q %>%
+  filter(removes == FALSE) %>%
+  select(code2, description2) %>% 
+  distinct(code2, .keep_all = TRUE) %>%
+  rename(code = code2, description = description2) %>%
+  arrange(code)
+
+# Check the final output
+head(survey_q)
+```
+
+One can check it with filter function.
+```{r}
+# Example
+filter(survey_q, code == 'H_COMP_2')
+```
+
+
+There are four clean datasets saved.
+They are `infection`, `survey`, `hospital` and `survey_q`. All are saved as r data file using `use_data()` function.
+
+
+### __3. Merge the clean datasets__
+
+1) Merge all three datasets
+```{r}
+# Merge three datasets for the final output
+merged_data <- hospital %>%
+  left_join(survey) %>%
+  left_join(infection)
+
+# Check the merged dataset
+head(merged_data)
+```
+
+There are some hospitals with `NA` as values in all the scores. Such places will be removed.
+```{r}
+# Remove NA
+merged_data <- merged_data %>%
+  filter(!is.na(survey_score) | !is.na(infection_score))
+
+# Check the merged data
+head(merged_data)
+```
+
+The clean data is saved as `merged_data`. Please use `hospitalrating::merged_data` to check it.
+
+
+### __4. Analysis__
+
+Using the merged dataset, conduct analyses and visualizations
+
+```{r fig.height=6, fig.width=6}
+# Load library
+library(ggplot2)
+
+merged_data %>%
+  select(facility_id, survey_score, infection_score) %>%
+  ggplot(data = ., aes(x = survey_score, y = infection_score)) +
+  geom_point() +
+  geom_jitter() +
+  geom_smooth() +
+  labs(title = "Scatterplot of infection scores and survey scores", subtitle = "Year 2018", xlab = "Average survey score by institutions", ylab = "Average infection score by institutions")
+  
+```
+
+Scatterplot shows that most hospitals have infection scores clustered around 2 and above. It also shows that survey scores and infection scores does not have a clear linear relationship.
+
+
+```{r}
+# Performance by state
+state_score <- merged_data %>%
+  select(state, infection_score, survey_score) %>%
+  filter(!is.na(infection_score), !is.na(survey_score)) %>%
+  group_by(state) %>%
+  summarise(state_score = mean(infection_score) + mean(survey_score)) %>%
+  select(state, state_score) %>%
+  mutate(state_score = state_score/2) %>%
+  arrange(desc(state_score))
+
+# Get top 5 states
+head(state_score, 5)
+```
+
+The top 5 states are Wisconsin, Idaho, Minnesota, Maine, and Oklahoma.
+
+```{r fig.height=10, fig.width=10}
+# Visualize the state scores
+ggplot(data = state_score) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_col(aes(x = state, y = state_score)) +
+  coord_cartesian(ylim=c(1.7, 2.5)) + 
+  labs(title = "Performance scores by states")
+  
+```
+
+Top performing cities
+```{r}
+# Top 10 cities
+merged_data %>%
+  select(city, infection_score, survey_score) %>%
+  filter(!is.na(infection_score), !is.na(survey_score)) %>%
+  group_by(city) %>%
+  summarise(city_score = mean(infection_score) + mean(survey_score)) %>%
+  select(city, city_score) %>%
+  mutate(city_score = city_score/2) %>%
+  arrange(desc(city_score)) %>%
+  head(., 10)
+
+```
+
+
+See New York City hospital performances
+```{r}
+# NYC hospital performances
+nyc_hospitals <- merged_data %>%
+  filter(city == 'NEW YORK') %>%
+  select(-facility_id, -city, -state, -hospital_type, -H:-H_SIDE_EFFECTS) %>%
+  mutate(total_score = (survey_score + infection_score)) %>%
+  mutate(total_score = round(total_score, digits = 2), 
+         survey_score = round(survey_score, digits = 2),
+         infection_score = round(infection_score, digits = 2)) %>%
+  arrange(desc(total_score))
+
+# Print results
+nyc_hospitals
+```
+
