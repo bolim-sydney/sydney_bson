@@ -1,0 +1,330 @@
+---
+title: "GR5072 Modern Data Structures_HW 9"
+author: "Bolim Son"
+date: "November 20, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+# Load libraries
+library(httr)
+library(rvest)
+library(dplyr)
+library(stringr)
+
+```
+
+
+#### __1. Get HTML__
+
+Get the content of the page into R.
+
+```{r}
+# Set url for Mitch McConnell's Wikipedia page
+url <- "https://en.wikipedia.org/wiki/Mitch_McConnell"
+
+# Get content
+wiki <- read_html(url)
+
+# Check the structure of content retrieved
+str(wiki, max.level = 1)
+
+```
+
+
+
+#### __2. Get the info box__
+
+On the right side of the page is a box of structured content, called an info box. Wikipedia has many types of such info boxes to provide content comparably for a group of articles of the same class (e.g. the Members of the U.S. senate, Fortune 500 companies, Crime Syndicates etc.)
+
+a) Find the CSS class of the infobox.
+```{r}
+infobox_node <- html_nodes(wiki, "table.infobox")
+
+```
+
+
+b) Extract the part of the HTML document that contains the infobox using the CSS information.
+```{r}
+infobox <- html_table(infobox_node)
+
+# Inspect the extracted infobox
+str(infobox)
+```
+
+
+
+#### __3. Make a data frame__
+
+a) Parse the infobox table HTML you obtained above into a data frame.
+
+```{r}
+# Parse to a data frame
+infobox_df <- as.data.frame(infobox[[1]])
+
+# Check the data frame
+head(infobox_df)
+```
+
+
+b) Name the columns of the table you obtain key and value. So, in the example for Mitch McConnell, "Deputy" would be the key, and the content information (i.e. the value) is "John Cornyn".
+
+```{r}
+# Place name as the first row
+infobox_df[1,] <- colnames(infobox_df)
+
+# Set column names
+colnames(infobox_df) <- c("key", "value")
+
+# Check infobox_df
+head(infobox_df)
+```
+
+
+c) Filter the data frame (and rename variables if necessary) to the "Full name", "Political Party", and "Children". Use this selection of variables for all subsequent questions.
+
+```{r}
+# Rename variable
+infobox_df[1,1] <- "Full name"
+
+# Filter using dplyr
+# Set variables
+vars <- c("Full name", "Political party", "Children")
+# Filter out the variables
+infobox_filter <- infobox_df %>%
+  filter(key %in% vars)
+
+# Show the filtered result
+infobox_filter
+```
+
+
+
+#### __4. Make a function__
+
+a) Use the code above to make a function called get_wiki_info that uses a single input url (a Wikipedia URL) and outputs the data frame of the format above. There is no need to account for exceptions (e.g. no info box on the page; page does not exist etc.) - we will only use members of the U.S. Senate for this exercise.
+
+```{r}
+get_wiki_info <- function(url = "https://en.wikipedia.org/wiki/Mitch_McConnell") { # Set default value as Mitch McConnell's wikipedia page
+
+# Retrieve a data.frame from wikipedia  
+  df <- read_html(url) %>%
+    html_nodes(., "table.infobox") %>%
+    html_table(.)
+  
+  df <- as.data.frame(df[[1]])
+# Rename some variables in the data.frame  
+  df[1, ] <- colnames(df)
+  df[1,1] <- "Full name"
+  colnames(df) <- c("key", "value")
+# Set variables of selection  
+  variables <- c("Full name", "Political party", "Children")
+# Filter the variables  
+  filter_df <- df %>%
+    filter(key %in% variables)
+  
+# Return result  
+  return(filter_df)
+}
+
+
+```
+
+
+b) Show how your function works on the following two URLs:
+
+https://en.wikipedia.org/wiki/Tammy_Duckworth , https://en.wikipedia.org/wiki/Susan_Collins
+Depending on your previous function, you may receive an error message because Susan Collins has no entry for Children. Fix your function so that NA is recorded in such instances.
+
+```{r}
+# Run get_wiki_info with Tammy Duckworth
+get_wiki_info(url = "https://en.wikipedia.org/wiki/Tammy_Duckworth")
+
+```
+
+```{r}
+# Run get_wiki_info with Susan Collins
+get_wiki_info(url = "https://en.wikipedia.org/wiki/Susan_Collins")
+```
+
+Results for Susan Collins does not have 'Children' variable. To record NA for children, the function will be modified.
+
+```{r}
+get_wiki_info <- function(url = "https://en.wikipedia.org/wiki/Mitch_McConnell") { # Set default value as Mitch McConnell's wikipedia page
+
+# Retrieve a data.frame from wikipedia  
+  df <- read_html(url) %>%
+    html_nodes(., "table.infobox") %>%
+    html_table(.)
+  
+  df <- as.data.frame(df[[1]])
+# Rename some variables in the data.frame  
+  df[1, ] <- colnames(df)
+  df[1,1] <- "Full name"
+  colnames(df) <- c("key", "value")
+# Set variables of selection  
+  variables <- c("Full name", "Political party", "Children")
+# Filter the variables  
+  filter_df <- df %>%
+    filter(key %in% variables)
+
+# Check for Children
+  if("Children" %in% filter_df$key == FALSE){
+    edit <- tibble::add_row(filter_df, key = 'Children', value = NA) # Add a row
+    return(edit)
+    
+  } else {
+    return(filter_df) # If have children, just return the dataframe
+  }
+  
+}
+```
+
+
+```{r}
+# Run edited function with Susan Collins
+get_wiki_info(url = "https://en.wikipedia.org/wiki/Susan_Collins")
+```
+
+
+
+#### __5. Get all senators' pages (Optional)__
+
+a) On this page (https://en.wikipedia.org/wiki/Current_members_of_the_United_States_Senate) you find a list of all current senators of the U.S. congress.
+Import the site and obtain a vector with the URLs for the Wikipedia sites of all 100 members of congress (hint: the function xml_attr is one option). Note, this should only include the URLs and remove all other content.
+
+```{r, cache = TRUE}
+## Set r chunck set as cache = TRUE and save retrieved data when knitting
+
+
+# Write a for loop to extract senator vectors from Wikipedia page
+
+# Set i as 2 because that is the first starting row
+i <- 2
+
+# Create a data.frame to store senator vector
+senator_names_df <- data.frame(names = 1:100)
+
+# Set a senator_url for extraction
+senator_url <- "https://en.wikipedia.org/wiki/Current_members_of_the_United_States_Senate"
+
+
+# For loop
+for (i in i:101) {
+
+# Make the loop run until the 100th one
+  if (i < 102) {
+    xpath_loop <- str_c('//*[@id="senators"]/tbody/tr[', i, ']/th')
+    
+    senator_names_df$names[i-1] <- read_html(senator_url) %>% 
+    html_node(xpath = xpath_loop) %>% 
+    html_node("a") %>% 
+    xml_attr('href') %>% # Choose attribute
+    str_c(.)  # Change to a string
+
+    senator_names_df
+        
+    } else {
+      return(senator_names_df) # Return data.frame
+    }
+}
+
+
+# Check data frame
+head(senator_names_df)
+
+```
+
+
+b) Create a loop that uses your get_wiki_info function to import the information on political party and number of children for all members of the senate.
+
+```{r, cache= TRUE}
+## Set r chunck set as cache = TRUE and save retrieved data when knitting
+
+# Create a list to place senator information
+senator_info <- list()
+
+i <- 1
+for (i in i:100){
+  
+  if(i < 101){
+# Set url for retrieving information  
+  senator_url <- str_c("https://en.wikipedia.org", senator_names_df$names[i])
+
+# Save the information in a list, extract only the values wanted
+  senator_info[[i]] <- t(get_wiki_info(url = senator_url))[2,]
+}}
+
+# Bind it all together
+senator_info_df = do.call(rbind, senator_info)
+senator_info_df <- data.frame(senator_info_df)
+colnames(senator_info_df) <- c("Full Name", "Political_party", "Children")
+
+# Check the binded dataframe
+head(senator_info_df)
+
+```
+
+
+c) Clean up your data to provide some summary statistics. How many children does the average senator have? What about by party affiliation?
+
+```{r}
+# Clean the data
+senator_info_clean <- senator_info_df %>%
+# Clean the political party
+  mutate(Political_party = 
+           str_remove(senator_info_df$Political_party, " *\\(.*\\)$")) %>%
+# Clean children
+  mutate(Children = 
+           str_remove_all(senator_info_df$Children, 
+                          "\\(, *including .*|son|daughter|1stepchild")) %>%
+  mutate(Children = 
+           str_remove_all(senator_info_df$Children, "\\[3\\]\\[4\\]")) 
+
+# Clean children
+senator_info_clean <- senator_info_clean %>%
+  mutate(Children = 
+           str_remove_all(senator_info_clean$Children, "\\s")) %>%
+  mutate(Children =
+           str_replace_all(senator_info_clean$Children, "[A-z]{1,}", "1")) %>%
+  mutate(Children = as.numeric(Children)) 
+
+# Check cleaned data
+head(senator_info_clean)
+```
+
+
+```{r}
+# Average children a senator has, among the ones that have children
+mean(senator_info_clean$Children, na.rm = TRUE)
+
+# Average children a senator has, if NA is counted as 0
+children_all <- if_else(is.na(senator_info_clean$Children), 0, senator_info_clean$Children)
+mean(children_all)
+
+```
+
+Average children a senator has, among the onese that have children, are approximately 2.77.
+
+If senators without children are included, on average, a senator has 2.05 children.
+
+
+```{r}
+# Party affiliation
+senator_info_clean %>%
+  group_by(Political_party) %>%
+  summarise(count = n())
+
+```
+
+There are 53 Republican senators, 46 Democratic senators, and 1 indpendent senator.

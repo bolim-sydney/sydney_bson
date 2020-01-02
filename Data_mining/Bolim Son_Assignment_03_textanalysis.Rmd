@@ -1,0 +1,358 @@
+---
+title: "GR5058 Assignment 3"
+author: "Bolim Son"
+date: "October 28, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+# Load packages
+library(stringr)
+library(tidytext)
+library(tidyverse)
+```
+
+
+### __1. Johnson Speeches__
+
+```{r, message=FALSE, eval=FALSE}
+# Data is downloaded and set into a directory
+# Load data
+if(!file.exists("Speeches_May_1967.zip")){
+  download.file(
+    "https://courseworks2.columbia.edu/files/6191118/download?download_frd=1", 
+    destfile = "Speeches_May_1967.zip")
+  unzip("Speeches_May_1967.zip")
+}
+```
+
+```{r, message=FALSE}
+dir("Speeches_May_1967")
+```
+
+
+__(A)__ Use the functions in the tm package to create an appropriate DocumentTermMatrix for this corpus.
+
+```{r, message=FALSE}
+# Load library
+library(tm)
+```
+
+```{r}
+# Create raw corpus
+s_corpus_raw <- Corpus(DirSource(
+  directory = "Speeches_May_1967", pattern = "speech"))
+
+s_corpus_raw
+```
+
+```{r}
+# Clean data
+s_corpus <- tm_map(s_corpus_raw, content_transformer(tolower))
+s_corpus <- tm_map(s_corpus, stripWhitespace)
+s_corpus <- tm_map(s_corpus, removePunctuation)
+s_corpus <- tm_map(s_corpus, removeNumbers)
+s_corpus <- tm_map(s_corpus, removeWords, stopwords("en"))
+s_corpus <- tm_map(s_corpus, stemDocument)
+
+# Create DocumentTermMatrix 
+s_dtm <- DocumentTermMatrix(s_corpus)
+
+# Show the matrix
+s_dtm_mat <- as.matrix(s_dtm)
+library(Matrix)
+s_dtm_Mat <- sparseMatrix(s_dtm$i, s_dtm$j, x = s_dtm$v,
+                          dims = c(s_dtm$nrow, s_dtm$ncol),
+                          dimnames = s_dtm$dimnames)
+
+# Display part of the matrix
+s_dtm_Mat[1:15 , 1:5]
+```
+
+__(B)__ Use the LDA function in the topicmodels package to perform Latent Dirichlet Allocation across k = 3 clusters.
+
+```{r}
+library(topicmodels)
+# Input needs to be a DocumentTermMatrix
+# value from (A) is used
+s_lda <- LDA(s_dtm, k = 3, control = list(seed = 1000))
+
+# Extract topics
+s_topics <- tidy(s_lda, matrix = "beta")
+
+# Display topics
+head(s_topics)
+```
+
+
+__(C)__ Based on your reading of a few critical speeches, what topics do each of these three clusters represent?
+
+* Analysis:
+
+  + Topic 1 seems to be about government and citizen's rights. More specifically, based on a few speeches, topic 1 mainly talks about government's roles and responsibilites for its citizens.
+  
+  + Topic 2 seems to be about internal governance affairs, services government provides, and the Vietnam War.
+  
+  + Topic 3 seems to be about domestic policies and related programs, including ones for economy, education public sector and so on. 
+  
+
+
+### __2. Analysis of Tweets__
+
+__(A)__ Load each of these two datasets into R using the readr::read_csv function and then use functions in the dplyr package to drop the variables named created_at, retweeted, and posted from the tweets data.frame and keep the observations where retweet_count is not NA.
+
+```{r, message=FALSE}
+# Load data
+tweet_raw <- readr::read_csv("tweets.csv")
+user <- readr::read_csv("users.csv")
+```
+
+```{r}
+# Clean data
+tweet <- tweet_raw %>%
+  select(-created_at, -retweeted, -posted) %>%
+  filter(!is.na(retweet_count))
+
+```
+
+
+__(B)__ Rename the first variable in the users data.frame from "id" to "user_id" and left_join your modified tweets data.frame with your modified users data.frame to create a combined data.frame with all remaining tweets and variables.
+
+```{r}
+# Rename column name in user data.frame
+user <- user %>%
+  rename(user_id = id)
+
+
+# left_join
+lj_tweet <- left_join(tweet, user, by = "user_id")
+
+head(lj_tweet)
+```
+
+
+__(C)__ Suppose the unit of observation is the hashtag. Is this combined data.frame in a "tidy" format? Why or why not? If not, how would you make it "tidy"?
+
+ * It is not "tidy" because texts are mixed up together in an unorganized format. For text analysis using R, a tidy text means that the text is prepared for R. This means that there are no upper or lower cases mixed together, there are no numbers, there are no punctuations, or weird (multiple) spacings inbetween. Also in the English language, stem words mean the same, so I would extract stem words, and treat words the same. For example, I will treat politics, politic, politicians the same by extracting "politi"
+
+ * Hashtags have lower and upper cases mixed. There are many punctuations. There are numbers. I would make it "tidy" by using functions in `stringr` package and `tm` package. I will remove punctuations and replace them with spaces. Then change all to lower cases, remove numbers, and extract stem words.
+
+
+
+__(D)__ Use the VectorSource and Corpus functions in the tm package (you may have to look at their help pages) to create a raw corpus where the tweets are "documents" and the hashtags are "words". Then, make everything lowercase and stem the hashtags but do not drop stop words or anything like that.You can ignore any warning messages. Create a DocumentTermMatrix from the processed corpus. What, conceptually, is the row-wise sum of this document-term matrix?
+
+
+```{r, message = FALSE}
+# Separate hashtags first
+tweet$hashtags <- 
+  str_replace_all(as.vector(tweet$hashtags), "[[:punct:]]", " ")
+
+# Create tweet corpus  
+t_corpus_raw <- VectorSource(tweet$hashtags)
+t_corpus <- Corpus(t_corpus_raw)
+t_corpus <- tm_map(t_corpus, content_transformer(tolower))
+t_corpus <- tm_map(t_corpus, removeNumbers)
+t_corpus <- tm_map(t_corpus, stemDocument)
+
+# Create DocumentTermMatrix 
+t_dtm <- DocumentTermMatrix(t_corpus)
+
+# Show the matrix
+t_dtm_mat <- as.matrix(t_dtm)
+t_dtm_Mat <- sparseMatrix(t_dtm$i, t_dtm$j, x = t_dtm$v,
+                          dims = c(t_dtm$nrow, t_dtm$ncol),
+                          dimnames = t_dtm$dimnames)
+
+# Display part of the matrix
+t_dtm_Mat[1:10, 1:4]
+
+dim(t_dtm_Mat)
+```
+
+
+__Analysis__
+
+Conceptually, the row-wise sum would equate to number of hashtags. For instance, row-wise sum for the 10th row is 4, it means that the 10th user in the tweet data.frame used 4 hashtags.
+
+When checked, dimensions say there are 58052 rows and 4893 columns. This means that there are 58052 users (document) and 4893 different hashtags (words). 
+
+
+__(E)__ What 10 hashtags have the largest weight as measured by term frequency inverse document frequency?
+
+```{r}
+# Calculate weighted term using 
+# inverse document frequency weighting
+library(tidytext)
+
+# Tidy Document term matrix created 
+# using tweet hashtag data
+t_corpus_tidy <- tidy(t_dtm)
+
+# Create term freqeuncy - inverse document frequency weighting
+t_corpus_tidy_tfidf <- t_corpus_tidy %>%
+  bind_tf_idf(term, document, count)
+```
+
+
+```{r}
+# Get the top ones
+top_tf_idf <- t_corpus_tidy_tfidf %>%
+  arrange(desc(tf_idf)) %>%
+  filter(tf_idf == max(tf_idf)) %>%
+  select(term)
+
+# There are many hashtags with the 
+# same term frequency - inverse document frequency
+nrow(top_tf_idf)
+
+# Print top 10 term frequency - inverse document freqency
+# based on document number
+head(top_tf_idf, 10)
+```
+
+* Note:
+
+There are many words with the same `tf_idf` values because there are many hashtags that are used once, hence has the same `idf` value. Also because many people had 1 hashtag for each tweet, there were multiple of the same `tf` values. As a result, there are many words with the same `tf_idf` value; in this case there are 764 words with the same `tf_idf` value of approximately 10.158.
+
+
+
+### __3. Preambles of Constitutions__
+
+```{r}
+# Load data
+data("constitution", package = "qss")
+
+# Explore data
+str(constitution, max.level = 1)
+```
+
+```{r}
+# Create country_year column
+constitution$country_year <- 
+  str_c(constitution$country, constitution$year, sep = "_")
+```
+
+__(A)__ In what way(s) would this data.frame not be considered "tidy" for text analysis?
+
+* Upper/lower case letters: 
+
+  + This has upper and lower case letters mixed together. R differentiates the two. If lower and upper case letters are mixed, even though the words are same, it will be tallied differently.
+
+* Punctuations:
+
+  + There are different punctuations mixed together, which interferes as regular expressions.
+
+* Lengths:
+
+  + Preamble variable in the constitution data.frame has all the character information in it. Information inside the preamble variable is too long. It should be broken down into _individual words_ for ease of analysis.
+  
+
+* Redundant or similar meaning words:
+
+  + In the English language, words with similar start have similar meanings. For example, economics, economy, economies all have "econom" in common. When doing topic-related analysis, it is better to treat economics, economy, economies same. 
+  
+* Numbers:
+
+  + Numbers are not important information in text analysis.
+
+
+__(B)__ Use the functions in the tidytext R package to make a "tidy" data.frame from the preamble variable in constitution.
+
+```{r}
+library(tidytext)
+
+# Use unnest_tokens() to create tidy format
+constitution_1 <- constitution %>%
+  unnest_tokens(word, preamble)
+
+# Remove numbers from the constitution
+constitution_1$word <- 
+  str_remove_all(as.vector(constitution_1$word), pattern = "\\d")
+
+constitution_1 <- constitution_1 %>%
+  filter(nchar(word) > 0)
+
+
+# Display data.frame
+head(constitution_1)
+```
+
+
+__(C)__ Use the relevant functions in the dplyr and tidytext package to eliminate English "stop words" from the "tidy" data.frame you created in part (B) to form a new data.frame.
+
+```{r, message = FALSE}
+# Load stop_words from the tidytext package
+data("stop_words")
+
+# Use anti_join() and eliminate stop words
+constitution_2 <- constitution_1 %>%
+  anti_join(stop_words)
+
+# Examine
+head(constitution_2, 10)
+```
+
+
+__(D)__ How many words are left once the "stop words" have been removed from these preambles?
+
+```{r}
+nrow(constitution_2)
+```
+
+* There are 20504 words left.
+
+
+__(E)__ How many of those words are unique?
+
+```{r}
+constitution_2 %>%
+  count(word, sort = TRUE) %>%
+  nrow()
+```
+
+* Each row means each unique word. Because there are 4,328 rows, there are 4,328 unique words.
+
+
+__(F)__ To make a document-term matrix from the "tidy" data.frame in (C), we first need to use the relevant functions in the dplyr package to create a tibble that counts up all of the times that a word appears in each constitution’s preamble. Then, call %>% cast_dtm(country_year, word, count) to create a document-term matrix.
+
+```{r}
+constitution_3 <- constitution_2 %>%
+  group_by(country_year, word) %>%
+  summarise(count = n())
+
+constitution_dtm <- constitution_3 %>%
+  cast_dtm(country_year, word, count)
+
+str(constitution_dtm, max.level = 1)
+```
+
+
+__(G)__ Execute hierarchical clustering on the document-term matrix in part (F) using single linkage. Suppose from the dendogram you decide their are 5 clusters. In what cluster does the constitution of trinidad, and, tobago, 1976 appear? Which other constitutions are in that same cluster?
+
+```{r}
+# Execute hierarchical clustering
+hc_constitution <- hclust(dist(constitution_dtm), method = "single")
+
+# Divide into 5 clusters
+clusters <- cutree(hc_constitution, k = 5)
+```
+
+
+```{r}
+# Print cluster for Trinidad and Tobago constitution of 1976
+clusters["trinidad_and_tobago_1976"]
+```
+
+```{r}
+# other countries in the first cluster
+df <- as.data.frame.vector(clusters)
+df$country_year <- rownames(df)
+
+# Other countries in the first cluster
+df$country_year[df$clusters == 1]
+```
+

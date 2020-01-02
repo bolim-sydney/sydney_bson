@@ -1,0 +1,22 @@
+Package: dataframeinfo
+Title: Inspect a data set
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Bolim",
+           family = "Son",
+           role = c("aut", "cre"),
+           email = "bs3222@columbia.edu",
+           comment = c(ORCID = "0000-0001-5926-560X"))
+Description: This package has unique functions help to explore the data.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+   dplyr (>= 0.3.0.1)
+devtools: :use_package("tidyverse")
+RoxygenNote: 6.1.1
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat
+VignetteBuilder: knitr

@@ -1,0 +1,212 @@
+---
+title: "GR5072 Modern Data Structures_HW 7"
+author: "Bolim Son"
+date: "November 8, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load libraries
+library(httr)
+```
+
+
+
+### __1. Define the base URL__
+
+In the documentation, find the API Endpoint for csv (Hint: if there is a json at the end, replace json with csv).
+
+```{r}
+endpoint <- "https://data.lacity.org/resource/63jg-8b9z.csv"
+```
+
+
+
+### __2. Send a simple GET request__
+
+Using httr, send a simple GET request to the base URL. Print the status and structure of the response (print only the first level in your ouput of str using the option max.level).
+
+```{r}
+base_url <- GET(endpoint)
+
+str(base_url, max.level = 1)
+```
+
+
+
+### __3. Get the content of the response__
+
+Retrieve the content of the response. What are the dimensions of the data frame? Tabulate the areas of the observations included.
+
+```{r, messages = FALSE}
+# Retrieve the content of the response
+sample_content <- content(base_url)
+```
+
+```{r}
+# Dimensions of the data frame
+dim(sample_content)
+```
+
+```{r}
+# Tabulate the areas 
+1000 * 28
+```
+
+
+
+### __4. Get your access token__
+
+As you have noticed, our initial request yielded only a small part of the data. For full access (actually the API seems not to care much, but for exercise's sake let's do it), you will need an API key to access the data. Sign up here https://data.lacity.org/profile/app_tokens and get your token.
+
+To keep your key safe, it is always better not to add it to your code. Place your token in the R environment file (as shown in class). Add the following lines (with your access info) to the .Renviron file (the usethis::edit_r_environ() function will be useful).
+Note: if you have trouble, take a look at this more extended discussion of the .Renviron file.
+
+```{r, eval = FALSE}
+# Find R home directory
+R.home(component = "home")
+
+# R_ENVIRON should be in "C:/PROGRA~1/R/R-36~1.1"
+
+# Place toekn in the R environment
+usethis::edit_r_environ()
+
+# App token for https://data.lacity.org
+```
+
+```{r}
+# Resend query
+full_content <- GET(endpoint, query = list("$limit" = "10000", "$$app_token" = Sys.getenv("LACRIME_APP_TOKEN")))
+```
+
+```{r}
+# Check status
+status_code(full_content)
+
+# Save the contents
+full_content_df <- content(full_content)
+
+# Check dimensions
+dim(full_content_df)
+```
+
+
+
+### __5. Limiting your query__
+
+Choose at least two more query field parameters from the API description [the blueish list on the bottom of the page], pass them to the query parameter list, and run the query (providing the server status again). Describe briefly in words what your query is selecting.
+
+```{r}
+# Add two parameters, victim age and victim sex
+parameter_content <- GET(endpoint, query = list("vict_age"= "25", "vict_sex" = "F", "$limit" = "10000", "$$app_token" = Sys.getenv("LACRIME_APP_TOKEN")))
+```
+
+```{r}
+# Check status
+status_code(parameter_content)
+
+# Check content
+head(content(parameter_content))
+
+```
+
+
+
+### __6. Locations__
+
+Choose one of the reverse geocoding APIs. Your task is to write a loop to find the addresses for 50 entries in your dataset based on their latitude and longitude. The object you get back is likely a bit verbose. You will need to take a look at the object to find the part where an address is provided.
+
+In the loop, add a status check (using an if statement) that will warn us if something goes awry. Lastly, add a Sys.sleep pause of 0.1 seconds after each URL retrieval to make sure we use the Maps API responsibly.
+
+As an output, provide a datatable showing the latitude, longitude, the location field from the original data API and a location_revgeo field which provides the address you got from the reverse geocoding for these 50 entries.
+
+```{r}
+
+library(dplyr)
+
+# Slice the dataset to have the first 50 entries 
+# Remove unnecessary variables
+full_content_df_sliced <- full_content_df %>%
+  select(lat, lon, location) %>%
+  mutate(location_revgeo = "") %>% # Add column to place the retrieved addresses
+  head(50) # First 50 entries only
+
+
+
+# for loop to retrieve addresses from Open Street Map API
+i <- 1
+for (i in i:50) {
+# Set latitudes, longitutdes, and base url to make an API query
+  lats = full_content_df_sliced$lat[[i]]
+  lons = full_content_df_sliced$lon[[i]]
+  mapbaseurl = "https://nominatim.openstreetmap.org/reverse"
+# Start of for loop
+if (i >= 1) {
+# Make an API query  
+    a <- GET(mapbaseurl, query = list("lat" = lats, "lon" = lons, "format" = "json"))
+# Add status check, if fail, system sleep for 0.1, else retrieve the address
+    if(status_code(a) != 200){
+      Sys.sleep(0.1)
+    } else {
+      address <- content(a)$display_name
+    }
+# Add the retrieved address to dataframe    
+  full_content_df_sliced$location_revgeo[[i]] <- address
+  } 
+}
+
+
+# Final output with address retrieved from API, renamed latitude and longitude
+full_content_df_sliced %>%
+  rename(latitude = lat, longitude = lon)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,391 @@
+---
+title: "GR5072 Modern Data Structures_HW 3"
+author: "Bolim Son"
+date: "October 3rd, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Set working directory
+setwd("C:/Users/bolim/OneDrive/Documents/GitHub/Son_Bolim/HW_03")
+```
+
+
+## __`for` Loops & Functions__
+
+### __1. Monkey song__
+
+__a) Write a loop__
+
+Write a for loop that will iterate the main verse from 10 to 1. End with the last verse.
+
+```{r, results = 'hide'}
+
+# Write a loop
+# Default: prints 10 to 1 and ends with last verse
+
+n <- 0
+
+for(n in 10:n)
+if(n > 1){
+  cat(
+    n, "little monkeys jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more monkeys jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else if(n == 1){
+  cat(
+    n, "little monkey jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more monkeys jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else { 
+    cat(
+    "No little monkeys jumping on the bed,
+None fell down and bumped their head,
+Papa called the doctor and the doctor said,
+\"Put those monkeys right to bed!\"", "\n"
+    )
+  }
+  
+
+```
+
+Print steps 10 to 8 (that is from 10 monkeys to 8 monkeys) to the console. Show the loop code and the print output in your solution. (Hint: the cat() function may be useful to concatenate the output you want.)
+
+```{r}
+# Print steps 10 to 8
+
+n <- 8
+
+for(n in 10:n)
+if(n > 1){
+  cat(
+    n, "little monkeys jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more monkeys jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else if(n == 1){
+  cat(
+    n, "little monkey jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more monkeys jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else { 
+    cat(
+    "No little monkeys jumping on the bed,
+None fell down and bumped their head,
+Papa called the doctor and the doctor said,
+\"Put those monkeys right to bed!\"", "\n"
+    )
+  }
+```
+
+
+__b) Convert loop to a function__
+
+Now convert the loop into a function. Generalize to any type of animal and a variable number of them (but assume the number of animals entered is larger or equal to 3). Set the default values of your function arguments to the original song. Show the function code in your solution and print the output using the following values: 3, Piglet.
+
+```{r}
+# Create a function
+animal_song <- function(n=10, animal_name="monkey") { # Default start from 10 animals, animal default to monkeys
+  animal_name <- rlang::as_string(animal_name)
+  animal_name_pl <- paste(animal_name, "s", sep ="")
+for(n in n:0)
+if(n > 1){
+  cat(
+    n, "little", animal_name_pl,"jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more", animal_name_pl,"jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else if(n == 1) {
+  cat(
+    n, "little", animal_name, "jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more", animal_name_pl, "jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else { 
+    cat(
+    "No little", animal_name, "jumping on the bed,
+None fell down and bumped their head,
+Papa called the doctor and the doctor said,
+\"Put those", animal_name_pl, "right to bed!\"", "\n"
+    )
+    cat(sep ="\n")
+  }
+}
+
+# Input values
+animal_song(n=3, animal_name = "piglet")
+```
+
+
+__c) Add error check__
+
+Add an error check to produce a warning when a user passes a non-numeric input to the number of animals.
+
+```{r, error = TRUE}
+# Add error check in the function
+animal_song <- function(n=10, animal_name="monkey") {
+# Add warning
+  if(is.numeric(n) == FALSE) stop('For n, enter integer from 3 to 10')
+  animal_name <- rlang::as_string(animal_name)
+  animal_name_pl <- paste(animal_name, "s", sep ="")
+for(n in n:0)
+if(n > 1){
+  cat(
+    n, "little", animal_name_pl,"jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more", animal_name_pl,"jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else if(n == 1) {
+  cat(
+    n, "little", animal_name, "jumping on the bed,
+One fell down and bumped his head,
+Mama called the doctor and the doctor said,
+\"No more", animal_name_pl, "jumping on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else { 
+    cat(
+    "No little", animal_name, "jumping on the bed,
+None fell down and bumped their head,
+Papa called the doctor and the doctor said,
+\"Put those", animal_name_pl, "right to bed!\"", "\n"
+    )
+    cat(sep ="\n")
+  }
+}
+
+
+# Test error sign
+animal_song(n = "ap", animal_name = "cat")
+```
+
+__d) BONUS (optional): Convert loop to a fully generalized function__
+
+Generalize to any number (i.e no longer assume a minimum of 3) of any animal involved in any activity (that is 'hopping', 'bouncing', 'skipping' etc.) on the bed. For equality, also randomize whether mama or papa calls the doctor each time with the probability of the binary choice as a parameter. Set the default values of your function arguments to the original song. Show the function code in your solution and print the output using the following values: num=3, animal=kangaroo, activity=dancing, probability=0.5.
+
+```{r}
+# Create a fully generalized function
+animal_song <- function(n=10, animal_name = "monkey", activity = "jumping", probability = 0.5) {
+  if(is.numeric(n) == FALSE) stop('For n, enter integer from 3 to 10')
+  if (n < 3) stop('n must be bigger than 3')
+  animal_name <- rlang::as_string(animal_name)
+  animal_name_pl <- paste(animal_name, "s", sep ="")
+  
+  # Another function inside a function to choose parent from
+  parent <- function(x=1){
+    sample(c("Mama", "Papa"), x, prob = c(probability, 1-probability))
+  }
+  
+for(n in n:0)
+  if(n > 1){
+  cat(
+     n,"little", animal_name_pl, activity, "on the bed,\n One fell down and bumped his head,\n", parent(), "called the doctor and the doctor said,\n \"No more", animal_name_pl, activity, "on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else if(n == 1) {
+  cat(
+    n, "little", animal_name, activity, "on the bed,\n One fell down and bumped his head,\n",parent(), "called the doctor and the doctor said,\n \"No more", animal_name_pl, activity, "on the bed!\"", "\n"
+  )
+  cat(sep ="\n")
+  } else { 
+    cat(
+    "No little", animal_name, activity, "on the bed,\n None fell down and bumped their head,\n",parent(), "called the doctor and the doctor said,\n \"Put those", animal_name_pl, "right to bed!\"", "\n"
+    )
+    cat(sep ="\n")
+  }
+}
+
+# Test function with num=3, animal=kangaroo, activity=dancing, probability=0.5
+animal_song(n = 3, animal_name = "kangaroo", activity = "dancing", probability = 0.5)
+
+```
+
+
+### __2. Draw a plot using a loop__
+
+__a) Plot with horizontal lines__
+
+Initialize a plot. Add 11 horizontal lines (from 0 to 10) using a for loop. Show the code of the loop and the plot in the output.
+
+```{r}
+# Initialize a plot
+plot(1, type = "n", xlab = "", ylab = "", xlim = c(0, 10), ylim = c(0, 10))
+
+# For loop
+for(n in 0:10)
+lines(x = c(0, 10), y = c(n, n), col = "red")
+
+```
+
+__b) Add vertical lines__
+
+Extend the previous code, but now also add 11 vertical lines. Show the code and the changed plot in the output.
+
+```{r}
+# Initialize a plot
+plot(1, type = "n", xlab = "", ylab = "", xlim = c(0, 10), ylim = c(0, 10))
+
+# For loop
+for(n in 0:10){
+lines(x = c(0, 10), y = c(n, n), col = "red") # Horizontal
+lines(x = c(n, n), y = c(0, 10), col = "blue") # Vertical
+}
+```
+
+__c) Add points__
+
+Lastly, add points() to the plot to all coordinate points where the lines intersect on the diagonals (that is the 45 and -45 degree lines). E.g. x=1,y=1 ... x=1,y=9 etc. Again, show the code and the changed plot output.
+
+```{r}
+# Initialize a plot
+plot(1, type = "n", xlab = "", ylab = "", xlim = c(0, 10), ylim = c(0, 10))
+
+# For loop
+for(n in 0:10){
+  lines(x = c(0, 10), y = c(n, n), col = "red") # Horizontal
+  lines(x = c(n, n), y = c(0, 10), col = "blue") # Vertical
+  points(x = c(n, n), y = c(n, n)) # 45 degree points
+  points(x = c(n, n), y = c(10-n, 10-n)) # -45 degree points
+}
+```
+
+
+__d) Convert to function__
+
+Convert this into a function that will allow the user to set the size of the plot (the plot should be square) and which items to draw (horizontal lines, vertical lines, points on the diagonal). Show the function you have written but no other output. Make sure the arguments of the function are set to sensible default values.
+
+```{r, results = 'hide', fig.show = 'hide'}
+# Create a function, default for n is 10 and for drawing is all TRUE
+plot_function <- function(n = 10, horizontal = TRUE, vertical = TRUE, points = TRUE){
+plot(1, type = "n", xlab = "", ylab = "", xlim = c(0, n), ylim = c(0, n))
+  for(a in 0:n){
+  if(horizontal == TRUE){
+      lines(x = c(0, n), y = c(a, a))
+    }
+  if(vertical == TRUE){
+      lines(x = c(a, a), y = c(0, n))
+  }
+  if(points == TRUE){
+    points(x = c(a, a), y = c(a, a))
+    points(x = c(a, a), y = c(n-a, n-a))
+  }
+  }
+}
+
+# Example of plot function
+plot_function(n = 5, horizontal = TRUE, vertical = FALSE, points = TRUE)
+```
+
+## __Descriptive Statistics of a Vector with Error Checks (Optional)__
+
+Write a desc_stats() function that calculates some descriptive statistics for a vector.
+
+__a) Calculate min and max__
+Write a function that takes a vector as input and prints its minimum and maximum. Make sure to remove any NAs from the vector before the calculations.
+
+```{r}
+# Create a vector with numbers and NA
+ex_vector <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, NA)
+
+# Write a function
+desc_stats <- function(x) {
+  max_n <- max(x, na.rm = TRUE)
+  min_n <- min(x, na.rm = TRUE)
+  result <- data.frame(values = c(max_n, min_n), row.names = c("max", "min"))
+  print(result)
+}
+
+# Print results
+desc_stats(x = ex_vector)
+```
+
+
+__b) Add the median__
+Add an additional argument to the function (set to FALSE by default) that will allow a user to calculate the median of the vector as well. If the median is calculated, round it to two digits (hint: use the function round()).
+
+```{r}
+# Add median
+
+desc_stats <- function(x, median_n = FALSE) {
+  max_n <- max(x, na.rm = TRUE)
+  min_n <- min(x, na.rm = TRUE)
+if(median_n == TRUE){
+  median_n <- median(x, na.rm = TRUE)
+  median_n <- round(median_n, digits = 2)
+  result <- data.frame(values = c(max_n, min_n, median_n), row.names = c("max", "min", "median"))
+  print(result)
+} else {
+  result <- data.frame(values = c(max_n, min_n), row.names = c("max", "min"))
+  print(result)
+}
+}
+
+desc_stats(x = ex_vector, median_n = TRUE)
+```
+
+
+__c) Add error checks__
+Try your function on an empty vector z1 <- c() and a vector containing only NAs. You probably get a rather cryptic error. Alter your function so that it stops when a user supplies an empty vector or a vector with only NAs and gives a short warning about the issue. I suggest to use the return() function for this as the first step of your function.
+
+```{r, error = TRUE}
+# Try out with empty vector and vectors with only NA
+z1 <- c()
+desc_stats(x = z1)
+
+z2<- c(NA, NA)
+desc_stats(x = z2)
+
+
+# Alter function, add warning message
+desc_stats <- function(x, median_n = FALSE) {
+# Vector error message  
+  if(length(x) == 0 | all(is.na(x) == TRUE)){return('Error: need a vector with numerical values, this vector has no values or only has NA')}
+  break
+# Otherwise, run the function
+  max_n <- max(x, na.rm = TRUE)
+  min_n <- min(x, na.rm = TRUE)
+if(median_n == TRUE){
+  median_n <- median(x, na.rm = TRUE)
+  median_n <- round(median_n, digits = 2)
+  result <- data.frame(values = c(max_n, min_n, median_n), row.names = c("max", "min", "median"))
+  print(result)
+} else {
+  result <- data.frame(values = c(max_n, min_n), row.names = c("max", "min"))
+  print(result)
+}}
+
+# Test
+desc_stats(x = z1)
+desc_stats(x = z2)
+```
+
+
+

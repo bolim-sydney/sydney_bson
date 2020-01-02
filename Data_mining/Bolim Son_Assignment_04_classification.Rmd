@@ -1,0 +1,189 @@
+---
+title: "GR5058 Assignment 4"
+author: "Bolim Son"
+date: "November 13, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+# Load libraries
+library(caret)
+library(dplyr)
+```
+
+
+### __1. Prediction with Linear Models__
+
+```{r}
+# Download the dataset
+ROOT <- "https://archive.ics.uci.edu/ml/machine-learning-databases/"
+crime <- read.csv(paste0(ROOT, "communities/communities.data"),
+                  header = FALSE, na.strings = "?")
+colnames(crime) <- read.table(paste0(ROOT, "communities/communities.names"),
+                              skip = 75, nrows = ncol(crime))[,2]
+
+# Omit na
+crime <- na.omit(crime)
+
+# Delete non-predictive variables
+crime1 <- crime %>% 
+  select(-state, -county, -community, -communityname, -fold) 
+
+```
+
+Split the dataset into training and testing using the createDataPartition function in the caret package after calling set.seed() using the number at the bottom of this page.
+
+```{r}
+# Set seed
+set.seed(216590223)
+
+
+# Split data to training and testing
+in_train_1 <- createDataPartition(y = crime1$ViolentCrimesPerPop, 
+                                  p = 0.8, list = FALSE)
+training_1 <- crime1[ in_train_1, ]
+testing_1 <- crime1[-in_train_1, ]
+```
+
+
+In the `train` function, use methods `glmnet` and `lm` to train. Model the `ViolentCrimesPerPop` variable in the training dataframe.
+
+```{r, message=FALSE, warning=FALSE}
+
+# Run glmnet model
+glmnet_1 <- train(ViolentCrimesPerPop ~ ., data = training_1, 
+                  method = "glmnet", preProcess = c("center", "scale"))
+
+# Predict using glmnet model
+glmnet_1_yhat <- predict(glmnet_1, newdata = testing_1)
+
+
+# Run lm model
+lm_1 <- train(ViolentCrimesPerPop ~ ., data = training_1, 
+              method = "lm", preProcess = c("center", "scale"))
+
+# Predict using lm model
+lm_1_yhat <- predict(lm_1, newdata = testing_1)
+
+
+```
+
+
+Which function and model produces the lowest mean squared error?
+```{r, message=FALSE, warning=FALSE}
+# glmnet 
+mean((testing_1$ViolentCrimesPerPop - glmnet_1_yhat)^2)
+
+# lm
+mean((testing_1$ViolentCrimesPerPop - lm_1_yhat)^2)
+```
+
+* Analysis:
+  
+  - Among the two methods `lm` and `glmnet`, `glmnet` produces lowest mean squared error.
+
+
+
+### __2. Classification of Binary Outcomes__
+
+```{r}
+# Load dataset
+loans <- readRDS("loans.rds")
+
+# Check the structure of dataset
+str(loans, max.level = 1)
+
+# Factorize y
+loans$y <- factor(loans$y, labels = c("yes", "no"), levels = 1:0)
+```
+
+Use the `createDataPartition` function in the caret package to split the data into a training set and a testing set. 
+
+```{r}
+# Split the data
+in_train_2 <- createDataPartition(y = loans$y, p = 0.8, list = FALSE)
+training_2 <- loans[ in_train_2, ]
+testing_2 <- loans[ -in_train_2, ]
+
+```
+
+Use the following methods train function in the caret package: `qda`, `glmnet`. Estimate classification models for y in the training data as a function of other variables in the dataset, possibly including interactions, polynomials, and /or variables you construct.
+
+```{r}
+# Train the data using qda and glmnet
+# Choose Amount.Requested, Debt.To.Income.Ratio and 
+# Employment.Length as variables
+
+# Train with QDA
+QDA <- train(y ~ Amount.Requested + Debt.To.Income.Ratio 
+             + Employment.Length, data = training_2, 
+             method = "qda",  preProcess = c("center", "scale"))
+
+QDA2 <- train(y ~ Amount.Requested + Debt.To.Income.Ratio 
+             + Employment.Length + Amount.Requested:Employment.Length, data = training_2, 
+             method = "qda",  preProcess = c("center", "scale"))
+
+
+# Train with glmnet
+glmnet_2 <- train(y ~ Amount.Requested + Debt.To.Income.Ratio 
+                  + Employment.Length, data = training_2, 
+                  method = "glmnet",  preProcess = c("center", "scale"))
+
+glmnet_3 <- train(y ~ Amount.Requested + Debt.To.Income.Ratio 
+                  + Employment.Length + Amount.Requested:Employment.Length, data = training_2, 
+                  method = "glmnet",  preProcess = c("center", "scale"))
+
+
+```
+
+Predict y in the testing dataset. You can use a threshold of 0.5 to classify observations in the testing dataset as being approved for a loan or not. 
+
+```{r}
+# Predict using testing dataset
+# Use QDA model, without interaction
+QDA_yhat <- predict(QDA, newdata = testing_2)
+
+# Check the results of QDA model
+confusionMatrix(QDA_yhat, reference = testing_2$y)
+```
+
+
+```{r}
+# Predict using testing dataset
+# Use QDA model, with interaction
+QDA_yhat2 <- predict(QDA2, newdata = testing_2)
+
+# Check the results of QDA2 model
+confusionMatrix(QDA_yhat2, reference = testing_2$y)
+
+```
+
+```{r}
+# Predict using testing dataset
+# Use glmnet model, without interaction
+glmnet_2_yhat <- predict(glmnet_2, newdata = testing_2)
+
+# Check the results of glmnet_2 model
+confusionMatrix(glmnet_2_yhat, reference = testing_2$y)
+```
+
+```{r}
+# Predict using testing dataset
+# Use glmnet model, with interaction
+glmnet_3_yhat <- predict(glmnet_3, newdata = testing_2)
+
+# Check the results of glmnet_3 model
+confusionMatrix(glmnet_3_yhat, reference = testing_2$y)
+
+```
+
+Using accuracy (the proportion of total correct classifications in the testing dataset) as your criterion, which function and model performs best?
+
+
+Considering proportion of total correct classifications in the testing dataset, `glmnet` method using interaction between Amount.Requested and Employment.Length works best (model name glmnet_3).
+
+For both QDA and glmnet method, adding the interaction term between Amount.Requested and Employment.Length increased accuracy. 

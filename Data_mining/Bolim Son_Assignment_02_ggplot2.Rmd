@@ -1,0 +1,309 @@
+---
+title: "GR5058 Assignment 2"
+author: "Bolim Son"
+date: "October 4, 2019"
+output:
+  pdf_document:
+    toc_depth : 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/bolim/OneDrive/Documents/0. Data Mining in R/Assignment_02")
+```
+
+### __1. Matrix Algebra__
+
+```{r}
+# Create matrices
+A <- matrix(c(5, 6, 1, 2, 2, 3), nrow = 2, ncol = 3)
+B <- matrix(c(3, -2, 4, -3, 5, 6), nrow = 2, ncol = 3)
+C <- matrix(c(1, -5, -3, 2, 3, 1), nrow = 3, ncol = 2)
+D <- matrix(c(2, 4, 1, 3), nrow = 2, ncol = 2)
+```
+
+a) A + C
+* This is not computable because matrix structures differ. A is 2 by 3 matrix and C is 3 by 2 matrix.
+
+b) A - B
+```{r}
+A - B
+```
+
+c) A + 5B
+```{r}
+A + 5*B
+```
+
+d) 3A
+```{r}
+3*A
+```
+
+e) 2B - 5A
+```{r}
+2*B - 5*A
+```
+
+f) $B^T$ - C
+```{r}
+t(B) - C
+```
+
+g) BA
+* This is not computable because number of columns in matrix B does not equal to the number of rows in matrix A
+
+h) DA
+```{r}
+D%*%A
+```
+
+i) AD
+* This is not computable because number of columns in matrix A does not equal to the number of rows in matrix D
+
+j) CD
+```{r}
+C%*%D
+```
+
+k) BC
+```{r}
+B%*%C
+```
+
+l) CB
+```{r}
+C%*%B
+```
+
+
+
+### __2.Orthogonality__
+
+Orthogonality in vectors means that the vectors are perpendicular to each other. When vectors are perpendicular to each other, the dot product of the vectors is zero. Hence, to prove that vector z is orthogonal to vectors x and y, dot products will be calculated for proof.
+
+
+First, to prove that z and x are orthogonal, dot product of z and x will be calculated.
+
+z = Xy
+
+X is a 3 by 3 matrix, y is 3 by 1 matrix. Therefore, z is a 3 by 1 matrix.
+
+First value of z is first row of X multiplied by the three elements in y, which is 0 * y1 + (-x3) * y2 + x2 * y3
+
+Second value of z is second row of X multiplied by the three elements in y, which is x3 * y1 + 0 * y2 + (-x1) * y3
+
+Third value of z is the third row of X multiplied by the three elements in y, which is (-x2) * y1 + x1 * y2 + 0 * y3
+
+Therefore, z is a matrix of 3 rows and 1 column with values -x3y2+x2y3 , x3y1-x1y3 , -x2y1+x1y2
+
+
+Dot product of x and z goes
+
+(x1 x2 x3).(-x3y2+x2y3  x3y1-x1y3  -x2y1+x1y2)
+
+
+which is
+
+-x1x3y2 + x1x2y3 + x2x3y1 - x1x2y3 - x2x3y1 + x1x3y2
+
+which is
+
+-x1x3y2 + x1x3y2+ x1x2y3 - x1x2y3 + x2x3y1  - x2x3y1 = 0
+
+Dot product of z and x equals to zero. Therefore, z and x are orthogonal to each other.
+
+
+
+Second, to prove that z and y are orthogonal, dot product of z and y will be calculated.
+
+As calcuated above, z is a matrix of 3 rows and 1 column with values -x3y2+x2y3 , x3y1-x1y3 , -x2y1+x1y2
+
+Dot product of y and z goes
+
+(y1  y2  y3).(-x3y2+x2y3  x3y1-x1y3  -x2y1+x1y2)
+
+which is
+
+-x3y1y2 + x2y1y3 + x3y1y2 - x1y2y3 - x2y1y3 + x1y2y3
+
+which is
+
+-x3y1y2 + x3y1y2 + x2y1y3 - x2y1y3 - x1y2y3  + x1y2y3 = 0
+
+Dot product of z and y equals zero. Therefore, z and y are orthogonal to each other.
+
+
+
+### __3. Split-Apply-Combine__
+
+```{r, messages = FALSE}
+# Load data
+state_patrol <- read.csv("il_statewide_2019_08_13.csv")
+library(dplyr)
+```
+
+
+```{r}
+# Filter out necessary data
+filter_state_patrol <- state_patrol %>%
+  select(subject_race, subject_sex, search_conducted)
+
+# Calculate proportions for combinations of race and sex for 
+# variable search_conducted
+t_search_conducted <- filter_state_patrol %>%
+  filter(search_conducted == TRUE, !is.na(subject_race), !is.na(subject_sex)) %>%
+  group_by(subject_race, subject_sex) %>% 
+  summarise(counts = n()) %>%
+  ungroup %>%
+  mutate(s_percentage = counts/sum(counts)*100)%>%
+  mutate(s_percentage = round(s_percentage, digits = 2)) %>%
+  select(-counts)
+
+t_final <- t_search_conducted %>%
+  rename(Race = subject_race, Sex = subject_sex, 
+         Proportion_search = s_percentage)
+
+# Print final result
+knitr::kable(t_final)
+```
+
+* Analysis:
+
+  + To calculate percentages, NA values were removed. In order to find how much a certain race composes of the total, variables other was not excluded.
+  
+  + Top 3 highest proportion of seraches grouped by race and sex are White males with 34.31%, followed by black males (23.31%), followed by hispanic males (16.07%).
+  
+  + Among all races, males have higher proportion of serches than females.
+  
+  + Asian/pacific islanders are the least likely race to be searched in state Illinois.
+
+
+
+### __4. Apartment Prices__
+
+```{r, messages = FALSE}
+# Load dataset
+apts <- readRDS(url('https://courseworks.columbia.edu/x/pJdP39'))
+```
+
+
+```{r, messages = FALSE}
+# Load libraries
+library(ggplot2)
+```
+
+
+```{r}
+# Clean dataset, filter and rescale variables of interest
+apts_filtered <- apts%>%
+  mutate(area_sqft = area * 10.764, totalprice_k = totalprice/1000) %>%
+  select(totalprice_k, area_sqft, age, floor)
+
+# Scatter plot between total price and area, readjusted
+ggplot(data = apts_filtered, aes(x = area_sqft, y = totalprice_k))+
+  geom_point(aes(color = age, size = floor, alpha = 0.8)) +
+  labs(x = "Area in square feet", y = "Apartment price (euros in thousands)", 
+       title = "Scatter plot of apartment size and price")
+
+
+```
+
+* Analysis
+
+  + Area in square meters were transformed to square feet. Apartment price was rescaled to thousands of euros.
+  
+  + The brighter a dot is, the older it is. The bigger a dot is, the higher floor it is. Alpha level is set to 0.8 to show overlap of plots.
+  
+  + The scatter plot shows that there is positive relationship between apartment size and apartment price. 
+  
+  + Coloring of the scatter plot bu age reveals that for apartments of similar size, when the apartment is older, the price tends to be cheaper.
+  
+  + Sizing dots by its floor reveals that floor of the apartment does not have big influence over apartment price. 
+ 
+  
+  
+### __5. Making Plots__
+Look at help(chickwts) for information on the chickwts data.frame. Produce a box-and-whiskers plot of weight for each of the six types of feed using the ggplot2 package. Interpret your plots.
+
+```{r}
+# Create a box plot with chickwts dataset
+
+ggplot(data = chickwts) +
+  geom_boxplot(aes(x= feed, y=weight)) +
+  labs(x = "Feed", y = "Chick weight", title = "Boxplot of Chicken Weight and Feed") +
+  coord_flip()
+
+
+```
+
+* Analysis
+  
+  + Boxplot shows that chicken weights have different medians differ by each chicken feed.
+  
+  + Chickens fed with sunflower seeds have the smallest interquartile range with short whiskers, which means that when chickens are fed with sunflower seeds, they will end up having the most similar chicken weight. To make chickens grow big, sunflower seeds are a good choice.
+  
+  + Chickens fed with soybeans have 4th highest median weight and relatively long whiskers, which represents variety in chicken weight.
+  
+  + Chickens fed with meatmeal have the 3rd highest median weight and the longest whisers, which means that differences in chicken weight is the largest when fed with meatmeal. Also, the median is closer to first quartile; range for the second quarter is smaller than the range for the third quarter.
+  
+  + Chickens fed with linseed have the 2nd lowest median weight. Chickens are not likely to grow big when fed with linseed.
+  
+  + Chickens fed with horsebean have the lowest median weight. When chickens are fed with horsebean, they are least likely to grow big.
+  
+  + Chickens fed with casein proteins have the highest median weight and largest interquartile range, which means that chicken weight is the most varied when fed with casein, and most chickens become big but with wider range of weight. In order to grow chickens big, casein protein is a good feed.
+  
+  
+
+### __6. Histograms__
+
+```{r, messages = FALSE}
+# Load libraries
+library(MASS)
+
+# Check dataset
+help(Cars93)
+```
+
+
+```{r, message=FALSE}
+# Histogram for each variable (Min.Price, Max.Price, Weight, Length)
+ggplot(data = Cars93)+
+  geom_histogram(aes(Min.Price))+
+  labs(x = "Basic model price by thousands of dollars", y = "Count", 
+       title="Histogram of basic model price")
+
+ggplot(data = Cars93)+
+  geom_histogram(aes(Max.Price))+
+  labs(x = "Premium model price by thousands of dollars", y = "Count", 
+       title="Histogram of premium model price")
+
+ggplot(data = Cars93)+
+  geom_histogram(aes(Weight))+
+  labs(x = "Weight in pounds", y = "Count", title="Histogram of weight")
+
+ggplot(data = Cars93)+
+  geom_histogram(aes(Length))+
+  labs(x = "Length in inches", y = "Count", title="Histogram of length")
+
+# Histogram of stratified price levels and DriveTrain
+ggplot(data = Cars93)+
+  geom_histogram(aes(Price), bins = 20)+
+  facet_wrap(~DriveTrain)+
+  labs(title="Histogram of car prices by car drive train", y = "count")
+
+```
+
+* Analysis
+
+  + Histogram of minimum price shows that prices of basic car versions are usually under $20,000. It is more widespread than maximum pirce.
+  
+  + Histogram of maximum price shows that prices for premium car versions are more densely concentrated than minimum price. Most common price range is \$15,000 ~ \$25,000.
+  
+  + Historgram of weight shows that no cars weigh under 1500 pounds. The most frequent weight is 3500 pounds.
+  
+  + Histogram of length shows that the shortest car is 140 inches long. Most cars are between 170 ~ 190 inches long.
+  
+  + Histogram of prices and drive train levels show that 4WD cars tend to be cheaper. Front wheel cars are most common. Rear wheel cars have widest price range.
+  
+  

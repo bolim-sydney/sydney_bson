@@ -1,0 +1,309 @@
+---
+title: "GR5072 Modern Data Structures_HW 4"
+author: "Bolim Son"
+date: "October 13, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## __Functions II__
+
+### __1. Functions in the `dplyr` Package__
+
+```{r, message=FALSE, echo=FALSE}
+# Install same version for dplyr package
+# devtools::install_github("tidyverse/dplyr")
+
+# Load dplyr library
+library(dplyr)
+```
+
+```{r}
+# Get all of the functions in dplyr
+content <- mget(ls("package:dplyr"), inherits = TRUE)
+dplyr_functions <- Filter(is.function, content)
+
+```
+
+__a) Longest name__
+
+Use the appropriate map function to produce a vector of the names of all functions in the dplyr package. Which function has the longest name?
+
+```{r}
+# Load library
+library(purrr)
+
+# Produce a vector of the names of all functions in dplyr package
+dplyr_function_names <- names(dplyr_functions) %>%
+  map_chr(paste) %>%
+  map(vector(mode = "character"))
+
+# Return longest name
+dplyr_function_names[nchar(dplyr_function_names) == max(nchar(dplyr_function_names))]
+
+```
+
+
+__b) Number of arguments__
+
+Use the appropriate map function to calculate the number of arguments by function. Present a table of the Top 10 functions with the most arguments. Which function has the most arguments? Hint: Remember that the functions formals(), body(), and environment() allow you to access parts of a function.
+```{r}
+
+# Get the number of arguments in each function
+n_arguments_list <- dplyr_functions %>%
+  map(formals) %>% # extract agruments
+  map_int(length) %>% # number arguments
+  sort(decreasing = TRUE) # sort
+
+  
+# Functions with most number of arguments
+n_arguments_list[1:10]
+
+```
+
+__c) Most common argument__
+Which function arguments are the top 5 most common? Briefly explain what the most common argument does.
+```{r}
+
+# Get agruments in dyplr_functions
+common_agruments <- dplyr_functions %>%
+  map(formalArgs) %>%
+  unlist()%>%
+  map_chr(paste)%>%
+  as.vector()%>%
+  as.data.frame.character()
+
+# Arrange the top 5 most common arguments
+common_agruments_5 <- common_agruments%>%
+  rename(arguments = ".")%>%
+  group_by(arguments)%>%
+  summarise(counts = n())%>%
+  arrange(desc(counts)) %>%
+  head(5)
+
+# Return the 5 most common arguments
+common_agruments_5
+```
+
+* Brief explanation of the 5 most common arguments:
+
+   + `...` is not specified part where additioanl arguments can be passed down in a function.
+   
+   + `x` refers to data to which the function will be applied to. `x` can be a tbl, vector, list etc.
+   
+   + `.data` refers to data to which the function will be applied to. For example, in the function `arrange(.data, ...)`, `.data` argument refers to a tbl where `arrange()` will be applied.
+   
+   + `.tbl` refers to a tbl to which the function will be applied to.
+   
+   + `.funs` refers to functions, so if this is written, you need to type a function that will be used.
+   
+   
+
+### __2. Infant Mortality and GPD per Capita__
+
+__a) Highest and lowest infant mortality rates in 2018__
+
+Use the WDI package to obtain country-year data on infant mortality and GDP per capita from the World Bank database.
+
+The indicator short names in the World Development Indicators are: NY.GDP.PCAP.PP.KD - GDP per capita, PPP (constant 2005 international), SP.DYN.IMRT.IN - Mortality rate, infant (per 1,000 live births). Make sure to obtain information about the region of the country as well (using the extra=TRUE option in the WDI() command). Specify the requested range of years from 1960 to 2018.
+
+```{r}
+# Load WDI package
+library(WDI)
+
+# Load dataset
+WDI_raw <- WDI(country = "all", indicator = c("NY.GDP.PCAP.PP.KD", "SP.DYN.IMRT.IN"), start = 1960, end = 2018, extra = TRUE)
+
+```
+
+Rename the variables: infant mortality (infmort) and GPD per capita (gdpcap). Keep only entries for countries (i.e. remove entries for regions and the World as a whole).
+```{r}
+# Clean dataset, rename variables
+WDI_clean <- WDI_raw %>%
+  filter(region != "Aggregates") %>%
+  select(country:SP.DYN.IMRT.IN, region) %>%
+  rename(infmort = SP.DYN.IMRT.IN, gdpcap = NY.GDP.PCAP.PP.KD)%>%
+  filter(!is.na(gdpcap),!is.na(infmort)) %>%
+  mutate(gdpcap = as.numeric(gdpcap))
+
+# Check dataset
+WDI_clean_check <- rbind(head(WDI_clean), tail(WDI_clean))
+WDI_clean_check
+
+rm(WDI_clean_check)
+
+n_distinct(WDI_clean$country)
+```
+
+
+Present a list of countries with the 5 highest and the 5 lowest infant mortality rates in 2018 along with their GDP per capita in that year.
+```{r}
+# Create a dataframe of mortality rates in 2018
+mortality_df <- WDI_clean %>%
+  filter(year == 2018) %>%
+  arrange(desc(infmort)) %>%
+  select(-year, -region)
+
+# Create a list of countries with the 5 highest and 5 lowest infant mortality rates in 2018 with their GDP per capita
+mortality_list <- rbind(head(mortality_df,5), tail(mortality_df,5)) %>%
+  map(as.vector) %>%
+  transpose()
+
+# Print the list
+mortality_list
+
+```
+
+
+__b) Overall regression__
+
+Run an overall regression predicting infant mortality from GDP per capita. What do you find? Make a scatter plot (including a regression fit line).
+
+```{r}
+# Remove NA
+library(ggplot2)
+
+# Run regression
+lm(infmort~gdpcap, WDI_clean)
+
+# Draw plot and regression line
+WDI_plot <- WDI_clean %>%
+  filter(!is.na(gdpcap), !is.na(infmort)) %>%
+  ggplot(mapping = aes(x = gdpcap, y = infmort)) +
+  geom_point(aes(alpha = 0.01)) +
+  geom_smooth(method = lm, aes(color = "red"))
+  
+
+WDI_plot
+```
+
+__c) Regression by region__
+
+Let's see if the overall relationship holds within world regions. Split the the data by region and create a nested list that contains these split data frames. In a single pipeline, re-estimate the regression for each of these data frames, obtain the coefficient estimates for the slope for each region and present them in a table (sorted by size of the coefficient).
+```{r}
+# Regression by region in a list
+WDI_lm_region <- WDI_clean %>%
+  split(WDI_clean$region, drop = TRUE) %>% # nested list by region
+  map(~lm(infmort ~ gdpcap, data =.)) %>% # regression
+  map(~coef(.))%>%
+  map("gdpcap")%>%
+  map_dfr(sort)%>%
+  tidyr::gather() %>%
+  rename(Regions = key, Slope_coefficient = value)
+
+# Table
+WDI_lm_region
+
+```
+
+
+__d) Regression by country__
+
+Let's also check if the relationship is consistent if estimated within countries. Split the overall data by country and create a nested list that contains these split data frames.
+
+Again, estimate a simple linear regression, predicting infant mortality by GDP per capita. In what percentage of the within-country regressions do we find a positive relationship (at the 95% confidence level) between GDP per capita and infant mortality? 
+
+```{r}
+# Create a nested list split by countries 
+WDI_country_split <- WDI_clean %>%
+  split(WDI_clean$country)
+
+# A dataframe of slope coefficients
+WDI_slope <- WDI_country_split %>%
+  map(~lm(infmort ~ gdpcap, data = .)) %>%
+  map(summary) %>%
+  map(~ coef(.)) %>%
+  map_dfr(`[`, 2) %>% # subset slope coefficients
+  tidyr::gather() %>%
+  rename(slope = value, country = key) # rename
+
+# A dataframe of p values 
+WDI_confintv <- WDI_country_split %>%
+  map(~lm(infmort ~ gdpcap, data = .)) %>%
+  map(summary) %>%
+  map(~ coef(.)) %>%
+  map_dfr(`[`, 8) %>% # subset p values
+  tidyr::gather() %>%
+  rename(confintv = value, country = key) # rename
+
+# Dataframe for all countries of its slopes and confidence intervals
+WDI_regression_all <- merge(WDI_slope, WDI_confintv) %>%
+  filter(!is.na(slope), !is.na(confintv)) %>%
+  mutate(slope = as.numeric(.$slope), confintv = as.numeric(.$confintv))
+
+# Filter countries with positive slope coefficients at 95% confidence interval  
+WDI_regression_positive <- WDI_regression_all %>%
+  filter(slope > 0, confintv <= 0.05)
+
+# Percentage of countries with positive relationship between GDP per capita and infant mortality
+nrow(WDI_regression_positive) / nrow(WDI_regression_all) * 100
+```
+
+ * At 95% confidence level, 4.86 % of countries have positive relationship between GDP per capita and infant mortality
+
+
+Make a histogram of the slope coefficients to illustrate the variation of the estimated relationship. 
+
+```{r}
+# Histogram of slope coefficients
+library(ggplot2)
+
+WDI_slope %>%
+  filter(!is.na(slope)) %>%
+  ggplot()+
+  geom_histogram(mapping = aes(x = slope))
+
+```
+
+Which country cases are most at odds with the overall regression estimated in part (b)?
+```{r}
+# Compare slope coefficient of each country with overall regression (-0.0009188)
+# Absolute value
+WDI_regression_compare <- WDI_regression_all %>%
+  mutate(comparison = abs(slope -(-0.0009188))) %>%
+  arrange(desc(comparison))
+
+# Return country with most difference in slope coefficient
+WDI_regression_compare[1, c(1,4)]
+```
+
+* Country with most at odds with overall regression in terms of slope coefficient is Malawi.
+
+__e) Added squared term__
+
+Let's see if we can improve the models slightly. Using the list of country data frames from (d), estimate regressions of infant mortality on GDP per capita and the square of GDP per capita. Compare the adjusted R-Squareds of the models with and without the added squared term of GDP per capita. Provide the average model adjusted R-squared with and without the squared term. Would you recommend to keep the squared term or not?
+
+```{r}
+# Linear regression with GDP per capita only
+gdpcap_1 <- WDI_country_split %>%
+  map(~lm(infmort~gdpcap, data=.)) %>%
+  map(summary) %>%
+  map("adj.r.squared")
+
+mean(as.numeric(gdpcap_1))
+
+# Linear regression with GDP per capita and its squared value
+gdpcap_2 <- WDI_country_split%>%
+  map(~lm(infmort ~ gdpcap + map_dbl(gdpcap, function(i)(i^2)), data=.))%>%
+  map(summary)%>%
+  map("adj.r.squared")
+
+mean(as.numeric(gdpcap_2))
+
+# Compare two model means
+
+mean(as.numeric(gdpcap_1)) - mean(as.numeric(gdpcap_2))
+
+```
+
+* Comparison of the two models show that squared term has approximately 9% increase, so adding the squared term will be a better answer.
+

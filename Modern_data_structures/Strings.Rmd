@@ -1,0 +1,283 @@
+---
+title: "GR5072 Modern Data Structures_HW 6"
+author: "Bolim Son"
+date: "October 25, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+# Load packages
+library(stringr)
+library(dplyr)
+```
+
+### __1. Scrabble__
+
+```{r}
+# Setup, load data
+# install.packages("ScrabbleScore")
+library(ScrabbleScore)
+data(twl06)
+scrabble <- twl06
+```
+
+__a) Words with `z`__
+
+Select all words that contain at least one z. Among the z-words, tabulate how many z's the words contain (i.e. how many words contain one z, two z's etc.).
+
+```{r}
+# Select all words with at least one "z"
+z_words <- str_subset(scrabble, "z+")
+```
+
+
+```{r}
+# There are 7124 words with at least one "z"
+length(z_words)
+
+# Print the first 10 words to check (there are just too many)
+z_words[1:10]
+```
+
+```{r}
+# Count "z"
+z_count <- str_count(scrabble, "z")
+
+# Table with the count of "z" in a word
+table(z_count)
+```
+
+
+__b) Word lengths__
+
+Provide a histogram of the word lengths in the scrabble dictionary.
+
+```{r}
+# Get length
+word_len <- data.frame(table(str_length(scrabble)))
+
+
+# Make a histogram
+library(ggplot2)
+ggplot(data = word_len) +
+  geom_col(mapping = aes(x = Var1, y = Freq))+
+  labs(title = "Histogram of Word Length", x = "Word length", y = "Count of Words")
+
+```
+
+
+__c) Vowels__
+
+How many words both start and end with a vowel?
+
+```{r}
+# Use regular expression for vowels
+sum(str_count(scrabble, pattern = "^[aeiou].*[aeiou]$"))
+
+```
+
+5075 words start and end with a vowel
+
+
+__d) Longest word with `New York`__
+
+What is the longest scrabble word that can be formed just out of the letters contained in "New York" (repetitions of letters are allowed)?
+
+```{r}
+# Find ones that only have n,e,w,y,o,r,k
+ny_words <- str_subset(scrabble, pattern = "^[newyork]{1,}+$")
+
+# Return longest one
+ny_words[str_length(ny_words)==max(str_length(ny_words))]
+```
+
+
+__e) Consonants only__
+
+Find the word(s) with the largest number of consecutive consonants.
+
+```{r}
+# Subset words with 2 or more consecutive consonants
+con_words <- str_subset(scrabble, pattern = "^.*[^aeiou]{2,}.*$")
+
+# Create a data.frame with the longest consonants
+longest <- as.data.frame(cbind(con_words, #Words
+        str_locate(con_words, pattern = "[^aeiou]{2,}"))) %>% # Consonant locations
+  mutate(end = as.numeric(levels(end)[end]), 
+         start = as.numeric(levels(start)[.$start])) %>% # Format numbers as numbers
+  mutate(c_length = end - start + 1) %>% # Cacluate length
+  arrange(desc(c_length)) %>% # Arragne by length
+  filter(c_length == max(c_length)) # Filter the longest ones
+
+# Return
+longest
+```
+
+
+__f) Bonuzz (optional)__
+
+Find the z-word(s) with z's that are as far apart as possible (i.e. we are interested in the distance between any two z's in the word). That means the word could contain more than two z's.
+
+```{r}
+# Subset words with 2 or more "z"
+z_words <- str_subset(scrabble, pattern = ".*[z]..*[z].*")
+
+# double "zz" as "z" (because only the location is necessary)
+z_words_2 <- str_replace_all(z_words, "zz", "z")
+
+# Create a data.frame with the z words
+z_longest <- as.data.frame(cbind(z_words, #Words
+        str_locate(z_words_2, pattern = "[z]{1,}.*[z]{1,}"))) %>% # z locations
+  mutate(end = as.numeric(levels(end)[end]), 
+         start = as.numeric(levels(start)[.$start])) %>% # Format numbers as numbers
+  mutate(z_length = end - start - 1) %>% # Cacluate length
+  arrange(desc(z_length)) %>% # Arragne by length
+  filter(z_length == max(z_length)) # Filter the longest ones
+
+# Return
+z_longest
+
+```
+
+
+### __2. Emergency Hospital Injuries__
+
+```{r, message=FALSE}
+# Read file
+ehi <- readr::read_csv("emergency.csv", col_names = FALSE)
+
+# Make it to a vector
+ehi <- as.vector(unlist(ehi)) 
+ehi <- str_to_lower(ehi)
+
+```
+
+__a) Fractures__
+
+Find all narratives related to "fractures". Try to include singular/plural/verb forms in your search. How many fracture narratives can you find?
+
+```{r}
+# Extract "fracture" narratives
+fractures <- ehi %>% 
+  str_subset(., pattern = "\\b[Ff]ractur(e|ed|es|ing)")
+
+# Extract distinct narrative forms
+fracture_narratives <- fractures %>%
+  str_extract_all(., pattern = "\\b[Ff]ractur(.|..|...)\\b")%>%
+  unique(.) %>%
+  unlist(.) %>%
+  as.vector(.) %>%
+  unique(.)
+
+# Return
+fracture_narratives  
+```
+
+There are 4 fracture narratives, which are "fractured", "fracture", "fracturing", and "fractures".
+
+
+__c) Body Parts__
+
+Among the fracture narratives, try to identify the body parts that are fractured (Note: Don't go overboard. A selection of parts is sufficient. No need to become a medicical doctor here). Make a histogram of fractured body parts (but make sure plural and singular are combined.)
+
+```{r}
+# Extract body parts
+body_parts <- "arm(.)|leg(.)|head|skull|hip(.)|finger(.)|ankle(.)|foot|feet|hand|hands"
+
+# Extracted from fracture string
+fractures_body <- fractures %>%
+  str_extract_all(., pattern = body_parts)
+
+# Select the ones only with body parts, remove redundancies
+fractures_body_df <- fractures_body[lapply(fractures_body, length)>0] %>%
+  unlist(.) %>%
+  str_replace_all(., "[[:punct:]]", "") %>%
+  str_replace_all(., "s$", "") %>%
+  str_replace_all(., " *", "") %>%
+  str_replace_all(., "foot", "feet") %>%
+  as.data.frame.character(., stringsAsFactors = FALSE)
+
+# Rename column name
+fractures_body_df$body_part <- fractures_body_df$.
+
+# Final result of fractured parts and frequencies
+fractures_body_tallied <- fractures_body_df %>%
+  select(-".") %>%
+  group_by(body_part) %>%
+  summarize(totals = n())
+
+# Return result
+fractures_body_tallied
+
+# Visualization
+library(ggplot2)
+ggplot(data = fractures_body_tallied) +
+  geom_col(mapping = aes(x = body_part, y = totals)) +
+  labs(title = "Fractured Body Parts Tallied")
+
+```
+
+
+__d) Age and Gender__
+
+Let's try to extract age and gender. You are generally looking for a pattern with a number (age), something to indicate the units, e.g. YO or YR for years old, or MO for months old, and a character that identifies the gender. So, I suggest to think of a pattern that combines these three parts.
+
+Create variables for age and gender (make sure to convert months to years when necessary). 
+
+How many males and females are in the data? Provide a line graph of the number of injuries (y-axis) vs age (x-axis) disaggregated by gender.
+
+```{r}
+# Extract info for years old
+ag_pattern_yr <- "\\b([0-9]{1,}) *(yo|yr) *(m|male|f|female)"
+age_gender_yr<- str_extract_all(ehi, pattern = ag_pattern_yr)
+age_gender_yr <- age_gender_yr[lapply(age_gender_yr, length)>0]
+
+# Change years info to data frame
+yr_df <- age_gender_yr %>%
+  str_remove_all(., "\\s") %>%
+  str_split(., pattern = "(yo|yr)", simplify = TRUE) %>%
+  as.data.frame(., stringsAsFactors = FALSE) %>%
+  mutate(V1 = as.numeric(V1)) %>%
+  select(-V3) %>%
+  filter(!is.na(V2), !is.na(V1), V1 > 0) %>%
+  rename(age = V1, gender = V2)
+
+# Extract info for months old
+ag_pattern_mo <- "\\b([0-9]{1,}) *(mo) *(m|male|f|female)"
+age_gender_mo <- str_extract_all(ehi, pattern = ag_pattern_mo)
+age_gender_mo <- age_gender_mo[lapply(age_gender_mo, length)>0]
+
+# Change months to years, change it to a data frame
+mo_df <- age_gender_mo %>%
+  str_remove_all(., "\\s") %>%
+  str_split(., pattern = "(mo)", simplify = TRUE) %>%
+  as.data.frame(., stringsAsFactors = FALSE)%>%
+  mutate(V1 = round(as.numeric(V1)/12, digits = 2)) %>%
+  filter(!is.na(V1), !is.na(V2), V1 > 0) %>%
+  rename(age = V1, gender = V2)
+
+# Combine
+ag_total <- rbind(yr_df, mo_df)
+
+# Visualization
+library(ggplot2)
+
+ag_total %>%
+  group_by(age, gender) %>%
+  count() %>%
+  ggplot() +
+  geom_line(mapping = aes(x = age, y = n, color = gender)) +
+  xlim(0,120) +
+  labs(title = "Frequency of ER Visits by Age and Gender")
+
+```

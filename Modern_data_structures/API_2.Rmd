@@ -1,0 +1,284 @@
+---
+title: "GR5072 Modern Data Structures_HW 8"
+author: "Bolim Son"
+date: "November 15, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+# Load packages
+library(httr)
+library(dplyr)
+```
+
+
+### __1. Choose an API__
+
+__a) Choose an API and briefly describe the type of data you can obtain from it. Note: Please do not use any of the APIs we covered in lecture (e.g. Twitter, NYTimes, Enigma, Zillow etc.).__
+
+API of my choice is New York City Open Data, Department of Buildings(DOB) Permit Issuance. It is updated daily. Details of the data is available __*[here](https://data.cityofnewyork.us/Housing-Development/DOB-Permit-Issuance/ipu4-2q9a)*__
+
+
+__b) Provide a link to the API documentation and__
+
+The link to API documentation is on __*[this link](https://dev.socrata.com/foundry/data.cityofnewyork.us/ipu4-2q9a)*__
+
+The API is powered by Socrata
+
+__c) the base URL of the API you intend to use.__
+
+```{r}
+# Base URL
+
+baseurl <- "https://data.cityofnewyork.us/resource/ipu4-2q9a.json"
+
+```
+
+
+
+### __2. Authentication__
+
+__a) Briefly explain how the API authenticates the user.__
+
+The API authenticates through Socrata
+
+__b) Apply for an API key if necessary and provide the information (with relevant URL) how that can be done.__
+
+You go to API Documentation site, which is available through __*[this link](https://dev.socrata.com/foundry/data.cityofnewyork.us/ipu4-2q9a)*__.
+Then, you scroll down the website and press "Sign up for an app token!", and sign up for the app token.
+
+
+```{r, eval = FALSE}
+# Find R home directory
+#R.home(component = "home")
+
+# R_ENVIRON should be in "C:/PROGRA~1/R/R-36~1.1"
+
+# Place toekn in the R environment
+# usethis::edit_r_environ()
+
+# App token for https://data.cityofnewyork.us/
+
+```
+
+App token name is "NYC_APP_TOKEN", secret token is "NYC_SECRET_TOKEN"
+
+
+
+### __3. Send a Simple GET request__
+
+a) Execute a simple GET request to obtain a small amount of data from the API. Describe a few query parameters and add them to the query. If you have a choice of the output the API returns (e.g. XML or JSON), I suggest to choose JSON because it easier to work with. Your output here should include the code for the GET request, including the query parameters.
+
+```{r}
+# Use the API key
+# Make a simple GET request with query parameters
+# Manhattan only, 5000 rows only
+
+sample <- GET(baseurl, query = list("borough" = "MANHATTAN", "$limit" = "5000", "$$app_token" =  Sys.getenv("NYC_APP_TOKEN")))
+
+# Check structure
+str(sample, max.level = 1)
+```
+
+
+b) Check the status of the request (using http_status).
+```{r}
+# Check status
+http_status(sample)
+```
+
+c) Check the type of the response (e.g. XML, JSON, csv using http_type).
+
+```{r}
+# Check type
+http_type(sample)
+
+```
+
+
+
+### __4. Parse the response and Create a dataset__
+
+a) Take the response returned by the API and turn it into a useful R object (e.g. a list, vector, or data frame). Show the code how this is done.
+
+```{r}
+# Change it to a useful R object
+sample_r <- content(sample)
+
+# See structure of sample_r
+typeof(sample_r)
+
+```
+
+
+```{r}
+# Change it to a dataframe
+# Because it is a list, use purrr package to change it to a data.frame
+library(purrr)
+
+# Change to a data.frame using map_df and `[` function
+sample_r_df <- sample_r %>% map_df(., `[`)
+
+# Explore the data.frame
+dim(sample_r_df)
+
+# See the first few contents
+head(sample_r_df)
+```
+
+b) Using the API, create a dataset (in data frame format) for multiple records. I'd say a sample size greater than 100 is sufficient for the example but feel free to get more data if you feel ambitious and the API allows you to do that fairly easily. The dataset can include only a small subset of the returned data. Just choose some interesting features. There is no need to be inclusive here.
+
+```{r}
+# Create a dataset for multiple records
+# Filter only residential buildings
+residential_df <- sample_r_df %>%
+  filter(residential == "YES") %>%
+# Choose street, work type, filing status, job start date, expiration date, and owner's business type
+  select(street_name, filing_status, job_start_date, expiration_date, owner_s_business_type) %>%
+# Change date columns as dates
+  mutate(job_start_date = as.Date(job_start_date), expiration_date = as.Date(expiration_date))
+
+```
+
+
+c) Provide some summary statistics of the data. Include the data frame in a .RDS file (using saveRDS) called data.rds with your submission for the grader.
+
+```{r}
+# See some basic information for residential_df
+summary(residential_df)
+```
+
+
+Exploratory data analysis for residential_df:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Top 10 streets for residential permit issuance
+residential_df %>%
+  group_by(street_name) %>%
+  summarise(streets = n()) %>%
+  arrange(desc(streets)) %>%
+  head(., 10) %>%
+  labs(title = "Top 10 popular streets for residental permit issuance")
+
+# Filing status
+residential_df %>%
+  group_by(filing_status) %>% # Group by filing status
+  summarise(count = n()) %>% # Count for each group
+  mutate(percentage = round(count/sum(count) * 100,digits = 2)) %>% # Calculate percentages
+  select(filing_status, count, percentage) # Select relevant columns
+
+# Who owns residential buildings in Manhattan
+residential_df %>%
+  group_by(owner_s_business_type) %>%
+  summarise(count = n()) %>%
+  ggplot(.) + # Create visualization
+  geom_col(aes(x = owner_s_business_type, y = count)) +
+  labs(title = "Owners of residential buildings in Manhattan", x = "Owner's business type", y = "Counts") +
+  coord_flip()
+
+# How long does it take from start to expiration on average?
+mean(residential_df$expiration_date - residential_df$job_start_date, na.rm = TRUE)
+
+```
+
+
+
+### __5. API Client__
+
+Lastly, let's try to wrap the code from the previous sections into a simple API client function. For example, in the ZillowR package, the command GetSearchResults() can be called with the following command
+
+GetSearchResults(address = '2114 Bigelow Ave', citystatezip = 'Seattle, WA')
+
+For your API function, try to create a simple function that does the following things:
+
+- allows to user to specify some smallish set of query parameters (from Q.3a)
+- run a GET request with these parameters
+- check the status of the request the server returns and inform the user of any errors (from Q.3b)
+- parse the response and return a R object to the user of the function. You can choose whether returning a list (from Q.4a) or a data frame (from Q.4b) is best.
+
+Note: There is no need to make this into an R package here. A simple function is sufficient.
+
+For the grader, please provide the following output.
+
+a) Your full function to access the API functionality. Set some sensible default values for the query parameters. 
+
+```{r}
+# API client function "nycDOBdata"
+
+# Default parameters set for borough (MANHATTAN), permit_status (ISSUED), filing_status (RENEWAL)
+
+nycDOBdata <- function(borough = "MANHATTAN", permit_status = "ISSUED", filing_status = "RENEWAL"){
+# Set base url
+    baseurl <- "https://data.cityofnewyork.us/resource/ipu4-2q9a.json"
+# Check if query parameters are set correctly
+
+# Check borough
+boroughs <- c("MANHATTAN", "BRONX", "BROOKLYN", "QUEENS","STATEN ISLAND")
+    
+    if(borough %in% boroughs == FALSE){
+    stop("Must enter only one of NYC boroughs as texts. Boroughs are MANHATTAN, BRONX, BROOKLYN, QUEENS, STATEN ISLAND", call. = FALSE)
+  }
+
+# Check permit status  
+permits <- c("ISSUED", "IN PROCESS", "RE-ISSUED", NA)
+  if(permit_status %in% permits == FALSE){
+    stop("Must enter only one of permit status as texts. Permit status are ISSUED, IN PROCESS, or RE-ISSUED")
+  }
+
+# Check filing status
+filings <- c("INITIAL", "RENEWAL")
+  if(filing_status %in% filings == FALSE){
+    stop("Must enter one of INITIAL or RENEWAL for filing status")
+  }
+
+# Clear query errors, do GET request
+  else{
+# GET request, limited to 200 rows
+  api_request <- GET(baseurl, query = list("borough" = borough, "permit_status" = permit_status, "filing_status" = filing_status, "$limit" = "200"))
+  } 
+  
+  # Check status
+  if(http_status(api_request)$category != "Success"){
+    stop("API has an error", call. = FALSE)
+  }
+  
+  # Check data type to be json
+  if(http_type(api_request) != "application/json"){
+    stop("API should return json", call. = FALSE)
+  }
+  
+# Return R object from requested API
+  api_content <- content(api_request)
+
+# Change it to a data.frame
+  api_df <- purrr::map_df(api_content, `[`)
+  
+
+}
+```
+
+
+b) The object your function returns for the default values. Please save this output object to api_client_output.RDS and include it with your submission.
+
+```{r}
+# Returns for default values
+api_client_output <- nycDOBdata()
+
+# Save as RDS file
+saveRDS(api_client_output, file = "api_client_output.rds")
+```
+
+

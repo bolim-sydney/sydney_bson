@@ -1,0 +1,88 @@
+---
+title: "Package dataframeinfo vignette"
+author: "Bolim Son"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{my-vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(dataframeinfo)
+```
+
+### __Description__
+
+The package `dataframeinfo()` is an package to explore a dataframe before going to an analysis.
+
+There are many ways to inspect a dataframe, but it is quite cumbersome to write each function.
+
+Hence, in this package, function `info()` just does the multiple functions at once and generates a list of information.
+
+This package was made because the author had spent hours searching for the wrong fixes.
+
+
+### __Function `info()`__
+
+Function `info()` has two arguments
+
+* `x` is a data frame. Input format must be a data frame. If not, the function will not run though. Use `data.frame()` or other functions to coerce your `x` into a data frame.
+
+* `y` is a column name in the specified data frame `x`. `y` must be a column name in `x`. If not, the function will not run through. Use `colnames(data_frame_name)` to first inspect your columns and write the column of your interest at `y`. Use `""` to write the column name. 
+
+* Example
+```{r}
+# Example 1
+
+# Arbitrary data frame generated for x
+# column name specified
+
+info(x = data.frame(a = rnorm(10, mean = 5, sd=1), b = 1:10), y = "a")
+```
+
+```{r}
+# Example 2
+
+# Using data frame in R
+info(x = mtcars, y = "cyl")
+
+```
+
+```{r}
+# Example 3
+
+# Using data frame in R
+
+info(x = iris, y = "Petal.Length")
+```
+
+### __Errors__
+
+The function `info()` will not run through if it encounters errors. 
+
+* `x` needs to be a data frame
+
+```{r, error = TRUE}
+# Error example 1
+
+info(x = list(a = rnorm(10, mean = 5, sd=1), b = 1:10), y = "a")
+
+```
+
+* `y` needs to be a column name of  `x`
+
+```{r, error = TRUE}
+# Error example 2
+
+info(x = data.frame(a = rnorm(10, mean = 5, sd=1), b = 1:10), y = "c")
+
+```
+

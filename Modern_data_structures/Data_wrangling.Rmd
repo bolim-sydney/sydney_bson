@@ -1,0 +1,188 @@
+---
+title: "GR5072 Modern Data Structures_HW 2"
+author: "Bolim Son"
+date: "September 26, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# __Selection of Data and Tidying__
+
+### __1.Remove all columns you do not need for the analysis (All done in R, of course. No Excel acrobatics.). We are interested in two sets of variables. Select the following variables and remove all others: a) Binge Drinking: Binge drinking prevalence among adults aged >= 18 years, Crude Prevalence in Percent. We would like to obtain this variable for the overall population, as well separately for females and males. b) Poverty: Poverty, Crude Prevalence in Percent. We only want the overall poverty prevalence to make things a bit easier.__
+
+* Read the file
+
+```{r, message=FALSE}
+setwd("C:/Users/bolim/OneDrive/Documents/GitHub/Son_Bolim")
+cdi_ttl <- read.csv("Dataset/U.S._Chronic_Disease_Indicators__CDI_.csv")
+
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+
+# Remove unnecessary columns, select variables "Binge Drinking" and "Poverty"
+cdi_1 <- cdi_ttl %>%
+  select(YearStart:DataValue, StratificationCategory1:Stratification1, DataValueTypeID, -DataSource, -Topic, -Response) %>%
+  filter(Question == "Binge drinking prevalence among adults aged >= 18 years" | Question == "Poverty",
+         StratificationCategory1 == "Overall" | StratificationCategory1 == "Gender", 
+         DataValueTypeID == "CRDPREV")
+
+
+# Remove unnecessary columns, add key column, filter out unnecessary rows and columns
+cdi_1 <- cdi_1 %>%
+  select(-YearEnd, -DataValueUnit, -DataValueType, -DataValueTypeID) %>%
+  mutate(key_col = ifelse(Question != "Poverty" & Stratification1 == "Overall", "binge_all",
+                          ifelse(Question != "Poverty" & Stratification1 == "Male", "binge_male",
+                                 ifelse(Question != "Poverty" & Stratification1 == "Female", "binge_female",
+                                        ifelse(Question == "Poverty" & Stratification1 == "Overall", "poverty", "N/A"))))) %>% 
+  filter(key_col != "N/A") %>%
+  select(-Question, -StratificationCategory1, -Stratification1)
+
+
+
+# Print out the dataset
+cdi_1
+
+```
+
+
+
+### __2. Convert the dataset to a tidy data set using the commands from the tidyr package.__
+
+```{r}
+binge_clean <- cdi_1 %>%
+  spread(key = key_col, value = DataValue)
+
+binge_clean
+```
+
+
+### __3.Rename the variables to follow the format below. Export tidy dataset "binge_clean"__
+
+```{r}
+binge_clean <- binge_clean %>%
+  rename(year = YearStart, state = LocationDesc, stateabb = LocationAbbr)
+
+binge_clean
+
+write.csv(binge_clean, "binge_clean.csv")  
+```
+
+
+# __Data Transformation and Summary Results__
+
+### __4. Produce a table that shows the overall, female, and male binge drinking prevalences across U.S. States in the most recent year of data for the Top 10 binge drinking states (i.e. the ones with the highest prevalence in the overall population). Use the relevant dplyr commands to select the right variables, sort the data (arrange()), and filter the data frame.__
+
+
+* Because United States, Puetro Rico, District of Columbia, Virgin Islands and Guam are not states, they will be removed.
+
+```{r}
+# Find top 10 states with highest overall binge drinking in year 2016
+top_10 <- binge_clean %>%
+  filter(year == 2016) %>%
+  filter(stateabb != "US" & stateabb != "PR" & stateabb != "DC" & stateabb != "VI" & stateabb != "GU") %>%
+  arrange(desc(binge_all)) %>%
+  top_n(10, binge_all) %>%
+  head(10)
+
+top_10
+```
+
+
+### __5. Make a simple scatter plot showing the correlation between the overall poverty prevalence in a state and the prevalence of binge drinking in the overall population. I suggest to use ggplot. Add a loess smoothed fit curve (use geom_smooth in the ggplot2 package) to indicate the pattern. Comment briefly.__
+
+* Because binge drinking value does not exist for year 2010, it will be filtered out. Also, because United States, Puetro Rico, District of Columbia, Virgin Islands and Guam are not states, they will be removed.
+
+```{r}
+library(ggplot2)
+
+# Filter data
+plot_data <- binge_clean %>%
+  filter(year != 2010) %>%
+  filter(stateabb != "US" & stateabb != "PR" & stateabb != "DC" & stateabb != "VI" & stateabb != "GU")
+
+plot_data
+
+# Check structure before plotting
+str(plot_data$poverty)
+str(plot_data$binge_all)
+
+# Change into proper structure
+plot_data$poverty <- as.numeric(levels(plot_data$poverty)[plot_data$poverty])
+plot_data$binge_all <- as.numeric(levels(plot_data$binge_all)[plot_data$binge_all])
+
+
+# Create a ggplot
+ggplot(data = plot_data, aes(x = poverty, y = binge_all)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Plotting of overall poverty and overall binge drinking", x = "Overall poverty percentage", y = "Overall binge drinking percentage")
+
+```
+
+* Comment
+
+  + The scatter plot shows that overall poverty and overall binge drinking have roughly negative correlation.
+  
+  + Smooth line shows that standard errors are greater in the lowest and higest overall poverty percentages.
+  
+  + Smooth line shows that correlation between overall poverty percentage and overall binge drinking percentage changes; correlation starts positive, takes a turn and changes to negative, then flattens as overall poverty percentage increases.
+
+
+### __6. Calculate the average annual growth rates (in percent) of overall binge drinking across states for the years the data is available. One way to get these growth rates, is to group the data by state (dplyr::group_by) and use the first() and last() commands in the summarize command followed by dividing the calculated percentage increase by the number of years. Provide a table of the 5 states with the largest increases and the 5 states with the largest decreases in binge drinking prevalence over the time period.__
+
+* Because United States, Puetro Rico, District of Columbia, Virgin Islands and Guam are not states, they will be removed. Also, growth rate cannot be calucated with blank data, so they will also be removed.
+
+```{r}
+# Create a new dataset for anlaysis, remove unncessary data
+growth_data <- binge_clean %>%
+  filter(stateabb != "US" & stateabb != "PR" & stateabb != "DC" & stateabb != "VI" & stateabb != "GU") %>%
+  select(year, state, binge_all) %>%
+  filter(!is.na(binge_all))
+
+growth_data$binge_all <- as.numeric(levels(growth_data$binge_all)[growth_data$binge_all])
+
+growth_data
+
+# Calculate average growth rate
+growth_data_1 <- growth_data %>%
+  group_by(state) %>%
+  summarise(base_yr = first(binge_all), last_yr = last(binge_all)) %>%
+  mutate(avg_growth_rate = ((last_yr - base_yr)/base_yr)/5 * 100) %>%
+  mutate(avg_growth_rate = round(avg_growth_rate, digits = 2)) %>%
+  arrange(avg_growth_rate)
+
+growth_data_1
+
+# Select top 5 and bottom 5 states, make it into a dataset
+top_5 <- growth_data_1 %>%
+  select(state, avg_growth_rate) %>%
+  arrange(desc(avg_growth_rate)) %>%
+  slice(1:5)
+
+bottom_5 <- growth_data_1 %>%
+  select(state, avg_growth_rate) %>%
+  arrange(avg_growth_rate) %>%
+  slice(1:5)
+
+
+top_5_bottom_5 <- rbind(top_5, bottom_5)
+```
+
+
+* Below is a table of 10 states that had the highest average growth rate and lowest average growth rate for overall binge drinking percentage. Numbers are expressed in percentages.
+
+```{r}
+# Final dataset
+knitr::kable(top_5_bottom_5, align = 'c', col.names =  c("State", "Avevrage Growth Rate in %"))
+```
+

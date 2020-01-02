@@ -1,0 +1,333 @@
+---
+title: "GR5058 Assignment 5"
+author: "Bolim Son"
+date: "December 4, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+#### __1. Smooth Nonlinear Models for a Continuous Outcome__
+
+```{r}
+# Load dataset, check structure
+data(College, package = 'ISLR')
+str(College, max.level = 1)
+```
+
+(a) Use the `createDataParition` function to split the observations into training and testing.
+```{r}
+# Load libraries
+library(caret)
+
+#Set seed
+set.seed(1262412046)
+
+# Use createDataPartition function to split observations
+intrain_uni <- createDataPartition(y = College$Outstate,
+                                   p = 0.8, list = FALSE)
+
+training_uni <- College[intrain_uni, ]
+testing_uni <- College[-intrain_uni, ]
+```
+
+
+(b) Use the `lm()` function to predict `Outstate` using whatever transformations, polynomials, cuts, and interactions you feel are necessary to predict well in the testing data.
+```{r, cache = TRUE}
+# Run linear regression model
+# Select variables Private(is the school private)
+# Accept/Apps (Acceptance rate)
+# Top10perc(Share of new students from top 10% of H.S. class) 
+# PhD(Share of faculty with PhD), and S.F.Ratio(Student to faculty ratio)
+# Make all variables interact with each other
+lm_uni <- lm(Outstate ~ (as.factor(Private) + Accept/Apps + Top10perc 
+             + PhD + S.F.Ratio)^2, data = training_uni)
+
+# See how the model works
+summary(lm_uni)[['r.squared']]
+summary(lm_uni)[['adj.r.squared']]
+```
+
+```{r, cache = TRUE}
+# Predict using the testing data
+lm_uni_yhat <- predict.lm(lm_uni, newdata = testing_uni)
+
+defaultSummary(data.frame(obs = testing_uni$Outstate,
+                          pred = lm_uni_yhat))
+
+```
+
+* Interpretation:
+
+`lm` model can explain 67.8% of the variance in testing data. The amount of variance explained in the trainig data and testing data is similar, which means that the model is not over-fitted to training data.
+
+
+(c) Use the `gam` function in the gam package to fit a Generalized Additive Model where there is a nonlinear relationship between Outstate and some of the predictors from your best model for the training data in part (b).
+```{r, cache=TRUE, warning=FALSE}
+# Load library
+library(gam)
+
+# Run gam function
+gam(Outstate ~ s(Apps, df = 4) + s(Top10perc, df = 4) + Private, data = training_uni)
+
+```
+
+
+(d) Use the plot method to ascertain which predictors, if any, exhibit a very non-linear relationship with Outstate, conditional on the other predictors?
+
+```{r, cache=TRUE, wanring = FALSE}
+# Show them separately
+plot(gam(Outstate ~ s(Apps, df = 4)+ s(Top10perc, df = 4) + Private, data = training_uni))
+```
+
+* Interpretation:
+
+Plotting shows that `Apps` variable, which is the number of applications, does not have much linear relationship. 
+
+
+(e) Is the average squared error in the testing data greater, less than, or about the same than with `lm`?
+
+```{r, message=FALSE, warning=FALSE, cache = TRUE}
+# Predict using 'gam'
+gam_object <- gam(Outstate ~ s(Apps, df = 4) + s(Top10perc, df = 4) + Private, data = training_uni)
+
+gam_predict <- predict(gam_object, newdata = testing_uni)
+
+defaultSummary(data.frame(obs = testing_uni$Outstate,
+                          pred = gam_predict))
+```
+
+```{r, message=FALSE}
+# Same formula with gam, using lm method
+defaultSummary(data.frame(obs = testing_uni$Outstate,
+                          pred= predict(lm(Outstate ~ Apps + Top10perc + as.factor(Private),
+                                           data = testing_uni))))
+```
+
+* Interpretation:
+
+`lm_uni_yhat` which has interactions, and `lm` method with interactions perform better than `gam` method. However, when same formula is used, `gam` method is better than `lm`.
+
+
+
+#### __2. Tree-Based Models for a Binary Outcome__
+
+```{r}
+# Load dataset
+payback <- readRDS("payback.rds")
+```
+
+(a) Use the `createDataParition` function to split the observations into training and testing.
+```{r message=FALSE}
+# Subset the dataset to variables that are important
+
+# Load library
+library(dplyr)
+
+# Exclude zipcode, state, verification status, purpose of borrowing, term
+# Excluded because not a strong predictive indicator
+# Change unemployed to -1 for emp_length variable
+payback <- payback %>%
+  select(-home_ownership, -verification_status, 
+         -zip_code, -purpose, -addr_state, -term) %>%
+  mutate(emp_length = replace(emp_length, is.na(emp_length), -1))
+
+
+# Split to training and testing data
+intrain_loan <- createDataPartition(y = payback$y,
+                                    p = 0.8, list = FALSE)
+
+# Split the data, outcome variable is numeric
+training_loan <- payback[intrain_loan, ]
+testing_loan <- payback[-intrain_loan, ]
+
+
+# Factorize outcome variable in training data
+training_loan2 <- training_loan %>%
+  mutate(y = factor(y, levels = 0:1, labels = c('punctual', 'late')))
+
+# Factorize outcome variable in testing data
+testing_loan2 <- testing_loan %>%
+  mutate(y = factor(y, levels = 0:1, labels = c('punctual', 'late')))
+```
+
+
+(b) Fit a logit model to the outcome in the training data, using whatever transformations, polynomials, cuts, and interactions you feel are necessary to predict well in the testing data.
+```{r, cache = TRUE, warning = FALSE}
+# Create a logit model when y is a factor
+ctrl <- trainControl("cv", number = 10)
+
+logit_loan <- train(y ~ loan_amnt + int_rate + installment + annual_inc + emp_length, 
+                    data = training_loan2, method = "glm", 
+                    trControl = ctrl, family = "binomial")
+
+# Predict when y is a factor
+logit_loan_yhat <- predict(logit_loan, newdata = testing_loan2)
+
+# See results when y is a factor
+defaultSummary(data.frame(obs = testing_loan2$y,
+                          pred = logit_loan_yhat))
+
+confusionMatrix(logit_loan_yhat, reference = testing_loan2$y)
+```
+
+Logit shows an accuracy of 0.859, but the specificity is very low. The model predicts that everyone is punctual, which means that the model is poor at predicting those who will have delays in paying back the loans.
+
+(c) Use a `boosting` and then a `dbart` approach to fit the outcome in the training data.
+```{r, cache = TRUE}
+# Load library
+library(gbm)
+library(dbarts)
+
+# Use boosting approach
+# Set grid
+gbmGrid <- expand.grid(.interaction.depth = seq(1, 4, by = 2),
+                       .n.trees = seq(10, 100, by = 10),
+                       .shrinkage = c(0.01, 0.1),
+                       .n.minobsinnode = 1:10)
+
+# Run the model when y is a factor
+GBM_loan  <- train(y ~ loan_amnt + int_rate + installment + annual_inc + emp_length, 
+                        data = training_loan2, trControl = ctrl, tuneGrid = gbmGrid,
+                        method = "gbm", verbose = FALSE)
+
+# Use GBM_loan to predict when y is a factor
+GBM_loan_yhat <- predict(GBM_loan, newdata = testing_loan2)
+defaultSummary(data.frame(obs = testing_loan2$y,
+                          pred = GBM_loan_yhat))
+
+confusionMatrix(GBM_loan_yhat, reference = testing_loan2$y)
+
+```
+
+* Interpretation:
+
+The `boosting` method (using `gbm` in train function) yields accuracy of 0.859. However, this gbm method also assumes that absolute majority will be punctual. Specificity is very low; the model will not be a good fit to predict who does not pay back loans on time.
+
+
+```{r, cache = TRUE}
+# Use dbart approach
+# Load library
+library(dbarts)
+
+dbarts_loan <- bart2(y ~ loan_amnt + int_rate + installment + annual_inc + emp_length,
+                     data = training_loan, test = testing_loan, combineChains = TRUE)
+
+               
+```
+
+```{r, cache = TRUE}
+plot(dbarts_loan, las = 1)
+```
+
+
+```{r}
+# See the results
+defaultSummary(data.frame(obs = as.factor(testing_loan$y),
+                          pred = ifelse(colMeans(dbarts_loan$yhat.test) > 0.5, 1, 0)))
+
+```
+
+
+(d) Rank the three approaches in parts (b) and (c) in terms of which is most likely to yield a correct classification in the testing data.
+
+There were three approaches, which were logit model, boosting model and a dbart approach.
+Logit model works best, followed by boosting and dbart approach.
+All have very similar accuracy, and all have low Kappa values. Since the model wishes to predict who will pay back late, they are not the best.
+
+
+#### __3. Neural Networks vs. Generalized Additive Models__
+
+(a) Load the orange juice dataset
+```{r}
+# Load dataset
+data("OJ", package = "ISLR")
+```
+
+(b) Use the `createDataParition` function to split the observations into training and testing.
+```{r}
+# Split data to training and testing
+intrain_oj <- createDataPartition(y = OJ$Purchase,
+                                  p = 0.8, list = FALSE)
+
+training_oj <- OJ[intrain_oj, ]
+testing_oj <- OJ[-intrain_oj, ]
+```
+
+(c) Fit a neural network model to the training data and use it to classify the outcome in the testing data.
+```{r, cache=TRUE}
+# Neural Network model
+
+# Set tuning parameters
+nnetGrid <- expand.grid(.decay = c(0, 0.1, .1),
+                        .size = c(1:10))
+
+# Run neural networks model with training data
+NN_oj <- train(Purchase ~ PriceCH + PriceMM + DiscCH + DiscMM + LoyalCH, 
+               data = training_oj, method = "nnet",
+               trControl = ctrl, tuneGrid = nnetGrid,
+               preProcess = c("center", "scale"),
+               trace = FALSE)
+```
+
+
+```{r, cache = TRUE}
+# See model performance with testing data
+NN_oj_yhat <- predict(NN_oj, newdata = testing_oj)
+
+# RSME, kappa values
+defaultSummary(data.frame(obs = testing_oj$Purchase,
+                          pred = NN_oj_yhat))
+```
+
+
+```{r, cache = TRUE}
+# Confusion Matrix (see both sensitivity and specificity)
+confusionMatrix(NN_oj_yhat, 
+                reference = testing_oj$Purchase)
+```
+
+(d) Fit a MARS model (with method = “earth”) and use it to classify the outcome in the testing data.
+```{r, cache = TRUE, warning=FALSE}
+# Set tuning parameters
+marsGrid <- expand.grid(.degree = 1:3, .nprune = 1:10)
+
+# Run MARS model
+MARS_oj <- train(Purchase ~ PriceCH + PriceMM + DiscCH + DiscMM + LoyalCH,
+                 data = training_oj,
+                 method = "earth", 
+                 trControl = ctrl,
+                 tuneGrid = marsGrid) 
+
+# See results (coefficients)
+coef(MARS_oj$finalModel)
+```
+
+```{r}
+# Variable importance
+varImp(MARS_oj)
+```
+
+```{r, cache=TRUE}
+# See how well the model predicts
+# Predict function
+MARS_oj_yhat <- predict(MARS_oj, newdata = testing_oj)
+
+# Accuracy and Kappa values
+defaultSummary(data.frame(obs = testing_oj$Purchase,
+                          pred = MARS_oj_yhat))
+```
+
+
+```{r, cache=TRUE}
+# Confusion matrix (see both sensitivity and specificity)
+confusionMatrix(MARS_oj_yhat, reference = testing_oj$Purchase)
+```
+
+
+(e) Which of these two approaches yields a higher proportion of correct classifications in the testing data?
+
+When neural networks model and MARS model are compared, accuracy is almost the same. However, balanced accuracy is higher for MARS model; so as a whole, MARS model performs better.
+

@@ -1,0 +1,200 @@
+---
+title: "GR5072 Modern Data Structures_HW10"
+author: "Bolim Son"
+date: "November 30, 2019"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+  html_notebook:
+    df_print: paged
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### __Practicing SQL Queries__
+
+```{r}
+library(DBI)
+witch_con <- dbConnect(
+  RMySQL::MySQL(),
+  user = 'student',
+  password = 'mds-is-fun',
+  dbname = 'witchcraft',
+  host = 'tbrambor.csbmzoea3lu9.us-east-1.rds.amazonaws.com',
+  port = 3306
+)
+```
+
+```{r}
+# Check connection
+witch_con
+```
+
+
+#### __1. Getting to know the data__
+
+a) Show a list of the tables included in the database.
+
+```{sql, connection = 'witch_con'}
+SHOW TABLES
+```
+
+b) Display the column names for the table `accused`.
+
+```{sql, connection = 'witch_con'}
+-- Use DESCRIBE
+DESCRIBE accused;
+```
+
+```{sql, connection = 'witch_con'}
+-- Use COLUMN_NAME and information.schema
+SELECT COLUMN_NAME 
+FROM information_schema.columns 
+WHERE table_name = 'accused';
+
+```
+
+
+c) How many people are included in the accused table?
+```{sql, connection = 'witch_con'}
+-- All the entries in the table
+SELECT COUNT(*)
+FROM accused
+```
+
+
+d) Display the columns firstname, sex, and age for 5 cases in the accused table.
+```{sql, connection = 'witch_con'}
+SELECT firstname, sex, age
+FROM accused
+LIMIT 5
+```
+
+
+e) Looks like the age is missing for some observations. Count the number of nonmissing values for age in the data.
+```{sql, connection = 'witch_con'}
+-- Count age
+SELECT COUNT(age)
+FROM accused
+WHERE age IS NOT NULL
+```
+
+
+f) Show a list of unique occupations.
+```{sql, connection = 'witch_con'}
+SELECT DISTINCT occupation
+FROM accused
+WHERE occupation IS NOT NULL
+```
+
+
+#### __2. Seeing the Devil__
+Let's look at some appearances of the devil in the devilappearance table.
+
+a) List the unique devil_types in the data.
+```{sql, connection = 'witch_con'}
+-- Select distinct types, remove null
+SELECT DISTINCT devil_type
+FROM devilappearance
+WHERE devil_type IS NOT NULL
+```
+
+
+b) There is also a little description of the type of the devil sighting in the devil_text column. How many of the sightings mention the word "black" in the description? 
+```{sql, connection = 'witch_con'}
+-- Mention the word 'black' in any context
+SELECT COUNT(devil_text)
+FROM devilappearance
+WHERE devil_text LIKE '%black%'
+```
+
+
+```{sql, connection = 'witch_con'}
+-- When the word 'black' is used separately
+SELECT count(devil_text)
+FROM devilappearance
+WHERE devil_text LIKE '%black %'
+```
+
+
+c) What proportion of the devils (in devil_type) are male?
+```{sql, connection = 'witch_con'}
+-- Select ones with devil_type = 'Male'
+-- Divide by all rows
+-- Alias as 'Percentage'
+SELECT COUNT(*) * 100 / (SELECT COUNT(*) FROM devilappearance) AS "Percentage"
+FROM devilappearance
+WHERE devil_type = 'Male'
+
+```
+
+
+
+#### __3. The trial__
+Let's take a look at the information on the trial.
+
+a) What are the average and maximum numbers of male and female accusers?
+```{sql, connection = 'witch_con'}
+SELECT AVG(female_accusers), MAX(female_accusers), AVG(male_accusers), MAX(male_accusers)
+FROM trial
+```
+
+
+b) Count the number of sentences by sentence type. List them in a table (in descending order), excluding missing values. Rename the column headings to something sensible.
+```{sql, connection = 'witch_con'}
+SELECT sentence AS 'Sentence Type', COUNT(*) AS 'Number of Sentences'
+FROM trial
+WHERE sentence IS NOT NULL
+GROUP BY sentence
+ORDER BY COUNT(*) DESC;
+```
+
+c) Do the number of accusers matter for the verdict? Compare the average number of accusers by the type of verdict. Again make sure the table is sorted and the headings make sense.
+```{sql, connection = 'witch_con'}
+SELECT verdict AS 'Verdict Type', AVG(female_accusers + male_accusers) AS 'Average number of accusers', COUNT(*) AS 'Number of Verdicts'
+FROM trial
+WHERE verdict IS NOT NULL
+GROUP BY verdict
+ORDER BY COUNT(*) DESC
+```
+
+#### __4. Tortured Truth (Bonus)__
+Note: This part is optional. We spent little time on joins in lecture, so I encourage you to try it but feel free to skip.
+
+a) Left join the trial and confession tables. For what share of trials does the database record confessions? Create a results table with the number of all trials, the number of confessions, and the share of trials with confessions recorded.
+
+```{sql, connection = 'witch_con'}
+-- Results table with number of all trials, all confessions, and the share of trials with confessions recorded
+SELECT 
+COUNT(DISTINCT t.trialref) AS 'Number of all trials',
+COUNT(DISTINCT c.confessionref) AS 'Number of all confessions',
+COUNT(DISTINCT c.trialref) AS 'Number of all trials with confessions',
+COUNT(DISTINCT c.trialref) / COUNT(DISTINCT t.trialref) * 100 AS 'Share of trials with confessions'
+FROM trial t
+LEFT JOIN confession c
+ON t.trialref = c.trialref;
+```
+
+Note: Some trials have two or more confessions.
+
+b) Only a small number of trials have records of torture. Is there a higher share of confessions among trials with records of torture than trials without such record? Hint: You will need to merge on the confession table.
+
+```{sql, connection = 'witch_con'}
+-- Does torture make people confess?
+-- Results table with share of confessions
+SELECT
+CASE WHEN t2.trialref IS NULL THEN 'No torture' ELSE 'Torture' END AS 'Cases',
+COUNT(DISTINCT c.trialref)/COUNT(DISTINCT t.trialref) * 100 AS 'Share of Confessions'
+FROM trial t
+LEFT JOIN confession c
+ON t.trialref = c.trialref
+LEFT JOIN torture t2
+ON t.trialref = t2.trialref
+GROUP BY Cases;
+```
+
+
