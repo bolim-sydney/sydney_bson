@@ -1,0 +1,252 @@
+---
+title: "GR5015 Final Project"
+author: "Bolim Son"
+date: "December 18, 2019"
+output:
+  word_document: default
+  pdf_document: default
+always_allow_pdf: yes
+subtitle: Effects EAGSS dataset
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,echo=FALSE}
+# Read dataset
+raw <- read.csv("EAGSS_dataset.csv")
+```
+
+
+```{r}
+library(dplyr)
+
+# Select variables for my anaylsis
+# Remove not valid cases
+egss <- raw %>%
+  select(V2, V4, V59:V61, V62:V67, V18, AGE, BMI, HMALONE, SEX, URBRURAL, RLTVHINC) %>%
+  na.omit() %>%
+  mutate(V2 = ifelse(V2 ==1, 'CN',
+                          ifelse(V2==2, 'JP', 'KR')))
+
+
+# Recode the variables
+# Increase in the variable will mean increase in the agreement, pollution
+# Recode to dummy variables
+egss <- egss %>%
+  mutate(V4 = 6 - V4) %>%
+  mutate(V18 = if_else(V18 == 1, 1, 0)) %>%
+  mutate(V59 = 5 - V59) %>% mutate(V60 = 5 - V60) %>%
+  mutate(V61 = 5 - V61) %>% mutate(V62 = 6 - V62) %>% 
+  mutate(V63 = 6 - V63) %>% mutate(V64 = 6 - V64) %>% 
+  mutate(V65 = 6 - V65) %>% mutate(V66 = 6 - V66) %>%
+  mutate(V67 = 6 - V67) %>%
+  mutate(URBRURAL = if_else(URBRURAL < 4, 1, 0)) %>%
+  mutate(SEX = if_else(SEX==1, 0, 1)) %>%
+  mutate(BMI = ifelse(BMI < 25 & BMI > 18.5, 1,
+                      ifelse(BMI >= 25 & BMI < 30, 2,
+                             ifelse(BMI >= 30, 3, 0)))) %>%
+  mutate(RLTVHINC = RLTVHINC - 1) %>%
+  as.data.frame()
+
+
+```
+
+```{r}
+library(knitr)
+
+# Summary statitics
+knitr::kable(egss %>% group_by(V2) %>% summarise('sample size' = n()))
+
+knitr::kable(summary(egss, digits = 2))
+
+```
+
+```{r}
+# Run naive model
+
+model1 <- lm(V4 ~ AGE + RLTVHINC + BMI + V59 + V60 + V61 + V62 + V63 + V64 + V65 + V66 + V67 + as.factor(URBRURAL) + as.factor(V18), data = egss)
+
+summary(model1)
+```
+
+Some variables are not as significant as expected
+Check for colinearity between related variables
+
+```{r}
+# Check for colinearity between variables
+
+# Subset pollution variables
+pollution_df <- select(egss, V59:V61)
+
+cor(pollution_df, use = 'complete.obs')
+```
+
+```{r}
+# See correlation among the pollution variables 
+library(psych)
+summary(psych::alpha(pollution_df))
+```
+
+
+```{r}
+# Select neighborhood variables
+neighborhood_df <- select(egss, V62:V67)
+
+
+# See correlation among the neighborhood variables
+cor(neighborhood_df, use = 'complete.obs')
+```
+
+
+```{r}
+# See correlation among the neighborhood variables
+summary(psych::alpha(neighborhood_df))
+```
+
+
+```{r}
+check <- egss %>% select(AGE, URBRURAL)
+
+summary(psych::alpha(check), check.keys = TRUE)
+```
+```{r}
+check2 <- 
+  
+egss %>% group_by(URBRURAL) %>% summarise(n())
+
+
+summary(psych::alpha(check2), check.keys = TRUE)
+
+```
+
+
+
+
+```{r}
+# Create a single variable for the correlated variavles
+egss_clean <- egss %>%
+  mutate(pollution = V59 + V60 + V61) %>%
+  mutate(neighborhood = V62 + V63 + V64 + V65 + V66 + V67) %>%
+  mutate(pollution = round(pollution/3, digits = 2)) %>%
+  mutate(neighborhood = round(neighborhood/6, digits = 2)) %>%
+  select(-V59:-V67)
+
+# Check df
+head(egss_clean)
+```
+
+```{r}
+knitr::kable(summary(egss_clean, digits = 2))
+
+```
+
+```{r}
+sd(egss$V4)
+
+sd(egss$V59)
+sd(egss$V60)
+sd(egss$V61)
+```
+
+
+```{r}
+sd(egss$V62)
+sd(egss$V63)
+sd(egss$V64)
+sd(egss$V65)
+sd(egss$V66)
+sd(egss$V67)
+```
+
+
+```{r}
+sd(egss$V18)
+sd(egss$AGE)
+sd(egss$BMI)
+sd(egss$RLTVHINC)
+
+```
+
+```{r}
+sd(egss_clean$pollution)
+sd(egss_clean$neighborhood)
+```
+
+
+
+```{r}
+# Run the model again
+# Pollution and neighborhood variables are together
+
+model2 <- lm(V4 ~ AGE + RLTVHINC + BMI + pollution + neighborhood + as.factor(URBRURAL) + as.factor(V18), data = egss_clean)
+
+summary(model2)
+```
+
+```{r}
+# Run the model again
+# Pollution and neighborhood variables are together
+# Differences by country is added as a dummy variable
+
+model3 <- lm(V4 ~ AGE + RLTVHINC + BMI + pollution + neighborhood + as.factor(URBRURAL) + as.factor(V18) + as.factor(V2), data = egss_clean)
+
+summary(model3)
+
+```
+Pollution is not relevant in so many ways.
+Remove pollution
+Make income and country interact with another
+
+```{r}
+# Run the model again
+# Pollution and neighborhood variables are together
+# Interaction between pollution and neighborhood is added
+# Differences by country is added as a dummy variable
+
+model4 <- lm(V4 ~ AGE + BMI + neighborhood + as.factor(URBRURAL) + as.factor(V18) + RLTVHINC*as.factor(V2), data = egss_clean)
+
+summary(model4)
+
+```
+
+Remove pollution,
+make BMI and country interact together
+```{r}
+# Run the model again
+
+model5 <- lm(V4 ~ AGE + RLTVHINC + neighborhood + as.factor(URBRURAL) + as.factor(V18) + BMI*as.factor(V2), data = egss_clean)
+
+summary(model5)
+```
+
+```{r}
+library(ggplot2) 
+
+df %>%
+  mutate(rmse = model4.residuals^2) %>%
+  mutate(rmse2 = model5^2) %>%
+  summarise(mean(rmse2))
+
+
+df <- data.frame(model4$residuals)
+df$model5 <- model5$residuals
+
+ggplot(data = df) +
+  geom_freqpoly(aes(x=model4.residuals), bins = 50, col = 'red') +
+  geom_freqpoly(aes(x=model5), bins = 50, col = 'blue') +
+  labs(title = "Residual Plot for Final Models", x = 'Residuals', y = '')
+  
+
+
+df2 <- data.frame()
+
+ggplot(data = df) +
+   +
+  labs(title = "Residual Plot for Final Model 5", x = 'Residuals', y = '')
+
+#plot(model6$residuals)
+```
+

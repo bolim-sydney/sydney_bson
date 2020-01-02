@@ -1,0 +1,572 @@
+---
+title: "Data Mining Final Project (GR5058)"
+subtitle: "Analysis and classification of World War I and US Civil War Texts"
+author: "Sydney Bolim Son (bs3222)"
+date: "12/19/2019"
+output: pdf_document
+always_allow_html: yes
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## __Project Description__
+
+This project is a text analysis project that is aimed to look at similarities and differences in World War I (WWI) texts and Civil War texts all available in `gutenbergr` package. Texts in `gutenbergr` are publicly open text data. 
+
+This project will be composed of two parts: 1) sentiment analysis and comparison of the two corpus, 2) predictive classification to see if the text is from WWI or the Civil War era.
+
+
+## __I. Data Cleaning__
+
+__1. Data aquisition__
+
+Data will be downloaded using the `gutenbergr` package. It will be filtered to extract relevant texts from the Civil War and World War I era. For lack of computing power, only the best selling books were chosen among the many texts related to the Civil War and World War I era.
+```{r, message = FALSE, warning=FALSE}
+# Load libraries
+library(gutenbergr)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(tidyr)
+
+# Select World War I and US Civil War best sellers from gutenbergr
+# Get gutenberg_id for download
+data("gutenberg_metadata", package = 'gutenbergr')
+
+gutenberg_metadata$WWI <- gutenberg_metadata$gutenberg_bookshelf %>% 
+  map(., str_detect, 'World War I/Bestsellers') # Create a filter column
+gutenberg_metadata$CW <- gutenberg_metadata$gutenberg_bookshelf %>% 
+  map(., str_detect, 'US Civil War/Bestsellers') # Create a filter column
+
+# Extract only the WWI id
+WWI_id <- gutenberg_metadata %>% 
+  filter(WWI == TRUE, has_text == TRUE, language == 'en') %>%
+  select(gutenberg_id) %>% str_extract_all(., '[0-9]{4,}')
+
+# Extract only the CW id
+CW_id <- gutenberg_metadata %>% 
+  filter(CW == TRUE, has_text == TRUE, language == 'en') %>%
+  select(gutenberg_id) %>% str_extract_all(., '[0-9]{4,}')
+
+# Download texts
+WWI_raw <- gutenberg_download(WWI_id[[1]])
+CW_raw <- gutenberg_download(CW_id[[1]])
+
+# Remove gutenberg_metadata from working space
+rm(gutenberg_metadata)
+
+# Check downloaded data
+head(WWI_raw)
+head(CW_raw)
+```
+
+
+__2. Data cleaning__
+
+Clean text refers to a large corpus that is ready for text analysis. The problem with the above downloaded text is that there are numbers, punctuations, and/or unnecessary stop words (a, an, the). To yield more accurate results, data will be cleaned.
+
+First, for sentiment analysis, the text will be unnested to words. Numbers and stop words will be removed. `tidytext` package will be used.
+```{r, message = FALSE}
+# Clean the dataset using tidytext package
+library(tidytext)
+
+# WWI data
+# Unnest to words
+WWI <- unnest_tokens(WWI_raw, word, text)
+
+# Detect numbers
+WWI$word <- str_replace_all(WWI$word,
+                            '[0-9]{1,}', 'REMOVE')
+# Remove numbers and stop words
+WWI <- WWI %>%
+  filter(word != 'REMOVE') %>%
+  anti_join(stop_words) %>%
+  mutate(war = 'WWI') %>%
+  mutate(index_n = 1:nrow(.))
+
+
+# Civil war data
+# Unnest to words
+CW <- unnest_tokens(CW_raw, word, text)
+# Detect numbers
+CW$word <- str_replace_all(CW$word,
+                           '[0-9]{1,}', 'REMOVE')
+# Remove numbers and stop words
+CW <- CW%>%
+  filter(word != 'REMOVE') %>%
+  anti_join(stop_words) %>%
+  mutate(war = 'CW') %>%
+  mutate(index_n = 1:nrow(.))
+
+# Check the clean data
+head(WWI)
+head(CW)
+```
+
+The cleaned dataset is merged together to create a single tidy dataset.
+```{r}
+# Merge the two data together
+tidy_war <- rbind(CW, WWI)
+```
+
+Now the data is cleaned, and it is ready for analysis.
+
+
+
+## __II. Sentiment analysis__
+
+For analysis, all words in the `tidy_war` dataset will be matched with `get_sentiments('nrc')` data, `get_sentiments('bing')` data, and `get_sentiments('afinn')` data for analyses.
+Visualizations will be provided for each sentiment analysis.
+
+
+__1. Frequently used words for sentiments__
+
+Even though the Civil War and the World War I did not occur too far apart, because the character of each warfare was very different, I hypothesized that the frequency of words used to express a sentiment would be different. 
+
+```{r}
+# Create a dataset with top 10 words used by sentiment and war
+# 10 sentiments and 2 wars, so there are 200 different words
+nrc_sentiments <- tidy_war %>%
+# Remove unnecessary columns
+  select(-gutenberg_id, -index_n) %>% 
+# Join with 'nrc' sentiment words
+  inner_join(get_sentiments('nrc')) %>% 
+# Count the numbers a word is used  
+  count(word, sentiment, war, sort = TRUE) %>% 
+  ungroup() %>%
+# Group by sentiments and war
+  group_by(sentiment, war) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n))
+
+# Visualize 
+library(ggplot2)
+
+# Anger and Fear
+nrc_sentiments %>% 
+  filter(sentiment == 'anger' | sentiment == 'fear') %>% #select sentiment
+  ggplot(aes(word, n, fill = war)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(sentiment~war, scales = 'free_y') +
+  labs(title = 'Frequency of Word Use, Anger & Fear', y = 'Count') +
+  coord_flip()
+```
+
+The visualization shows that for the same sentiment, there is a difference in the words used for Civil War (CW) and World War I (WWI). For the sentiment 'anger', because the Civil War was a domestic one without a clear enemy, enemy was not a frequently used word. However, for WWI, there was a clear split in the countries, which is reflected in that it uses the word 'enemy' often. 
+
+For the sentiment 'fear', it shows that for WWI, the word 'war' is used significantly more than other words. This is possible because the word 'war' is imbedded in the WWI, and many referred to the WWI as 'the great _war_' even back then. This shows limitations in text analysis where it is tokenized into words. When a general noun is used as a proper noun (as names), the count will increase. This could be possible for the large number of counts for the word 'war' in WWI. Words used for 'fear' are also different, which is in accordance with the sentiment 'anger'.
+
+```{r}
+# Trust and Anticipation
+nrc_sentiments %>% 
+  filter(sentiment == 'trust'| sentiment == 'anticipation') %>% #select sentiment
+  ggplot(aes(word, n, fill = war)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(sentiment~war, scales = 'free_y') +
+  labs(title = 'Frequency of word use, Trust & Anticipation', y = 'Count') +
+  coord_flip()
+
+```
+
+Other two positive sentiments were selected for analysis, which were 'anticipation' and 'trust'. Surprisingly, most words overlapped for 'anticipaiton'. WWI had a high count for the word 'peace', which shows that peace was more yearned for in WWI literature than it was for the Civil War. Moreover, the word 'god' was used more frequently in Civil War context, which could be reflective of religious contexts involved in the Civil War. On the contrary, words as 'council', 'public', 'organzization' is often used in WWI context, which shows that WWI had political interests of many countries involved. 
+
+
+__2. Positive and negative sentiments in each war__
+
+Both the Civil War and the WWI are tragic events; the analysis is to see if the sadness is reflected in each text, and see if there are any similarities and/or differences.
+
+```{r}
+library(tidyr)
+# Positive or negative
+bing_sentiments <- tidy_war %>%
+  select(-gutenberg_id) %>%
+  inner_join(get_sentiments('bing')) %>%
+  count(war, index = index_n %/% 100, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+# Visualize
+ggplot(bing_sentiments, aes(index, sentiment, fill = war)) + 
+  geom_col(show.legend = FALSE) + 
+  facet_wrap(~war, ncol = 2, scales = 'free_x') +
+  labs(title = 'Positive and Negative Sentiments in Each War', x = '')
+```
+
+The visualization shows that both texts have largely negative sentiments, which proves the tragedy and grim expressed in the literature. The distributions look similar too, with some positive sentiments and largely negative sentiments. WWI has more negative sentiments than the Civil War. This is understandable in that the WWI was the first warfare with large civilian casualties.
+
+
+__3. Affinity for each war__
+
+Affinity score was assigned to each word, then counted to see the distribution of negative or positive words in each context. Additional to the analysis done above, affinity scores seemed to be able to produce more understanding.
+
+```{r}
+# Positivity and negativity scores
+afinn_sentiments <- tidy_war %>%
+  select(-gutenberg_id) %>%
+  inner_join(get_sentiments('afinn')) %>%
+  count(war, value)
+
+# Visualization
+ggplot(afinn_sentiments) +
+  geom_col(aes(x=as.factor(value), y = n, fill = war)) +
+  facet_wrap(~war) +
+  labs(title = 'Word scores by War',
+       x = '', y = 'count')
+```
+
+Affinity scores showed that for both narratives, the distribution is skewed to negative side. Moreover, it shows taht the general shape of the distribution is similar; WWI is of a greater degree. The affinity score distribution is in accordance with the postive and negative sentiment analysis in II.2.
+
+
+## __III. Document Term Matrix Analysis and classification__
+
+`tm` package will be used to create a document term matrix on a dataset about words used in literary works during the Civil War and World War I era. Since the number of books are limited, each row would be a chapter from the books. Each column would be words. Stop words will be removed. Data from sentiment analysis above will be used as independent variables to predict if a document is written in the civil war or the World War I era.
+
+Training dataset and testing dataset will be created using `createDataPartition` function from `caret`. Different models will be used for classification. Then, the models will be judged based on its performance (overall accuracy).
+
+
+__1. Create document term matrix__
+
+```{r, warning=FALSE, message = FALSE}
+# Create document term matrix
+
+# Create a raw tibble with WWI and Civil War data
+war_raw <- rbind(WWI_raw, CW_raw)
+# Filter out empty rows
+war_raw <- filter(war_raw, str_length(war_raw$text) > 0)
+# Replace multiple white spaces to one white space
+war_raw$text <- war_raw$text %>% map(., str_replace_all, ' {2,}', ' ')
+war_raw$text <- war_raw$text %>% map(., str_remove_all, '^ ')
+
+# Assign chapter numbers
+war_chapter <- war_raw%>%
+  group_by(gutenberg_id) %>%
+  mutate(chapter = cumsum(str_detect(text, 
+        regex('^(CHAPTER|Chapter|[\\d]|[IVXLC]{1,}) *([\\dIVXLC]{1,}|$)')))) %>%
+  ungroup() %>%
+  mutate(reference = str_c(gutenberg_id, chapter, sep = "_")) %>%
+  select(reference, text)
+
+# Remove chapters from text
+war_chapter$text <- str_remove_all(war_chapter$text, 
+                    '^(CHAPTER|Chapter|[\\d]|[IVXLC]{1,}) *([\\dIVXLC]{1,}|$)')
+
+# Remove punctuations
+war_chapter$text <- str_replace_all(war_chapter$text, '[[:punct:]]', ' ')
+war_chapter$text <- str_replace_all(war_chapter$text, '"', '')
+
+# Filter out empty rows
+war_chapter <- filter(war_chapter, str_length(war_chapter$text) > 0)
+
+# See the number of chapters (observations)
+length(unique(war_chapter$reference))
+```
+
+There are total of 699 observations for analysis. Each chapter will be clumped together to create a dataset, where one row equals to one observation.
+
+```{r, warning=FALSE, message = FALSE}
+# List of unique references (book and chapter number)
+ref_list <- unique(war_chapter$reference)
+
+# Create a tibble to store information
+out <- tibble(reference = ref_list, text = 1:length(ref_list))
+# Create a list to store the characters
+out_list <- list()
+
+# Set starting number
+i <- 1
+
+# Write a loop for the 696 different book and chapter (observation)
+repeat{
+  
+  df <- filter(war_chapter, reference == ref_list[i])
+  value <- df$text %>% map(., paste, collapse = NULL) %>% unlist(.) %>% list(.)
+  out_list[i] <- value
+
+  i = i+1
+
+  if(i == 697){
+    break
+  }
+}
+
+# Store the list in the text table
+out$text <- out_list
+```
+
+
+Use the `text` column of `out` dataset as the vector source, put it as raw Corpus, and create a `DocumentTermMatrix`.
+
+```{r, message = FALSE}
+# Load library
+library(tm)
+
+# Create a corpus, tidy the corpus
+corpus_raw <- Corpus(VectorSource(out$text))
+corpus <- tm_map(corpus_raw, content_transformer(tolower))
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords('en'))
+corpus <- tm_map(corpus_raw, stemDocument)
+
+# Create document term matrix
+dtm <- DocumentTermMatrix(corpus)
+```
+
+```{r}
+# Check the document term matrix
+dtm_matrix <- as.matrix(dtm)
+
+# See the first few rows and columns
+dtm_matrix[1:5, 1:5]
+```
+
+
+__2. Analysis with document term matrix__
+
+With the clean document term matrix, inverse document frequency weighing and association will be analyzed.
+
+1) Term-frequency, inverse document frequency weighing
+```{r}
+# Tidy the document term matrix
+# See its term-frequency, inverse document frequency weighing
+
+# Tidy the document term matrix
+tidy_corpus <- tidytext::tidy(dtm)
+
+# See the top 10 words for inverse document frequency weighing
+tidy_corpus %>%
+  bind_tf_idf(term, document, count) %>%
+  arrange(desc(tf_idf)) %>%
+  select(term, tf_idf) %>%
+  head(10)
+
+```
+
+Term-frequency, inverse document frequency weighing shows relative importance of a word in a text. In other words, it is re-weighted. What is interesting in this analysis is the word 'peace', which also appeared in sentiment analyses. This shows that hopes and wants for peace is emphasized in wartime literature, which is logical.
+
+
+2) Association
+
+Association will be looked for two words that are relevant and particular for each war. For Civil War, because it is related with slavery, the word 'slave' was chosen. 
+```{r}
+# See associations with words
+# Use the top words found above
+
+# Commonly used word in Civil War
+findAssocs(dtm, 'slave', corlimit = 0.5)
+```
+
+Word with highest association score was abolitionist. The Civil War is relevant with slavery and abolishing slavery; which is more understandable in that the text for analyses were the Civil War literature.
+
+For the WWI, word 'trench' was chosen. Trench is a battle technique that began in WWI and was heavily applied throughout the warfare.
+```{r}
+# Commonly used word in WWI
+findAssocs(dtm, 'trench', corlimit = 0.5)
+```
+Highly associated words have 'shell', 'dugout', 'hole', 'mud', 'bomb', which explains the trench environment. Trenches are long dugouts in the ground where soliders hid to attack. The dugouts made intricate systems as the war developed. Trenches were usually muddy. Bombs were thrown and people hid in the trenches from the bombings. Association yields quite accurate results.
+
+
+__3. Binary classification model using document term matrix__
+
+This part illustrates if the usage of words will be significant enough to classify a document to either the Civil War or the World War.
+
+1) Create dataframe and split to training and testing data
+
+For binary classification prediction model, dataframe indicating when the war happened was added. Then, the dataframe was split to training and testing data.
+
+```{r}
+# Create a dataframe for binary classification
+# Select the y column that indicates which war
+# Bind it with document term matrix
+
+# Split so that there is a book column to check if a book is WWI or CW
+class_df <- out %>% select(-text) %>%
+  separate(reference, c('book', 'chapter'), sep = '_', remove = FALSE) %>%
+  mutate(y = ifelse(book %in% unlist(CW_id), 1, 0)) %>%
+  mutate(y = factor(y, levels = 1:0, labels = c('CW', 'WWI'))) %>%
+  select(y)
+
+dtm_df <- cbind(class_df, as.data.frame(dtm_matrix))
+
+colnames(dtm_df) <- str_remove_all(colnames(dtm_df), '"')
+
+# Check dataframe
+dtm_df[1:5, 1:5]
+```
+
+```{r, message=FALSE, warning=FALSE}
+# Split the data into training and testing data
+set.seed(100)
+library(caret)
+
+in_train <- createDataPartition(y = dtm_df$y,
+                                p = 0.6,
+                                list = FALSE)
+training <- dtm_df[ in_train, ]
+testing <- dtm_df[-in_train, ]
+```
+
+2) Binary classification models
+
+Different regressional models will be used to see how classification works. Independent variables will include key words from analysis in part II.1. Words that are used particularly more in one war are selected.
+
+* __Simple logit model__
+```{r, cache = TRUE}
+model1 <- glm(y ~ peace + trench + slave + god + war + time,
+              data = training,
+              family = binomial)
+
+# Probabilities of fitting to civil war
+model1_yhat <- predict(model1, newdata = testing, type = 'response')
+
+# Use 0.5 as the cutoff, and classify the logit
+model1_z <- factor(model1_yhat > 0.5, levels = c(TRUE, FALSE),
+                   labels = c('CW','WWI'))
+
+# Create a table
+table(model1_z, testing$y)
+```
+
+Simple logit model yields accuracy of 0.314, which is pretty low. To improve accuracy of the model, below models will use tuning parameters and see if the models are improved.
+
+
+* __Peanlized logit model__
+```{r, cache = TRUE}
+# Set tuning parameters
+ctrl <- trainControl(method = 'cv', number = 10)
+tune_grid <- expand.grid(.alpha = seq(0, 1, length.out = 10),
+                         .lambda = seq(0, 1, length.out = 10))
+
+# Run a penalized logit model
+model2 <- train(y ~ peace + trench + slave + god + war + time,
+                data = training,
+                method = 'glmnet',
+                trControl = ctrl,
+                tuneGrid = tune_grid)
+
+# See performance
+confusionMatrix(predict(model2, newdata = testing),
+                reference = testing$y)
+```
+
+Tuning parameters were introduced in the penalized logit model. The accuracy increased to 0.686. However, the increase in accuracy comes from the prediction model classifying most texts as World War I script.
+
+
+* __Discriminant analysis__
+
+```{r, warning = FALSE}
+# Run discriminant analysis
+LDA <- train(y ~ peace + trench + slave + god + war + time, 
+             data = training,
+             method = 'lda')
+
+# See performance
+confusionMatrix(predict(LDA, newdata = testing),
+                reference = testing$y)
+
+```
+
+For discriminant analysis, linear discriminant analysis was chosen. LDA performance was slighlty inferior to penalized logit model. Discriminant analysis did not have particular tuning parameters, but the disciminant analysis works to deal with covariance, which improves its model performance.
+
+
+* __Regression Splines: MARS model__
+
+```{r}
+# Load libraries
+library(earth)
+
+# Set tuning parameters
+marsGrid <- expand.grid(.degree = 1:3,
+                        .nprune = 1:4)
+
+# Run the model
+MARS <- train(y ~ peace + trench + slave + god + war + time, 
+              data = testing,
+              method = 'earth',
+              trControl = ctrl,
+              tuneGrid = marsGrid)
+
+# See important variables
+varImp(MARS)
+```
+
+
+```{r}
+# See the performance
+confusionMatrix(predict(MARS, newdata = testing), 
+                reference = testing$y)
+```
+
+MARS model is simple and easy to analyze, and conceptually simple to understand as well. For this MARS model, tuning parameters were added to improve its performance. MARS model had accuracy of 0.7112, which was the highest among models.
+
+
+* __Random forest__
+
+Random forest is one of the most often used methods in making predictive modeling, so randcom forest was applied for binary classification as well.
+```{r}
+# Set tuning parameters
+rf_grid <- data.frame(.mtry = 3)
+
+# Run random forest
+RF <- train(y ~ peace + trench + slave + god + war + time,
+             data = training,
+            method = 'rf',
+            trControl = ctrl,
+            tuneGrid = rf_grid,
+            ntrees = 100, importance = TRUE
+)
+
+varImp(RF)
+```
+
+```{r}
+# See the performance
+confusionMatrix(predict(RF, newdata = testing), 
+                reference = testing$y)
+```
+
+Random forest yields 'god' as the most important variable to split between the Civil War and WWI. 'god' was the most important variable in MARS model as well. When comparing the important variables in MARS model and random forest model, both models have different importance results and scores for different variables besides the word 'god', which shows that based on which model you choose, the results will be different.
+
+Random forest had accuracy of 0.704, which was the second highest among the models.
+
+* __Boosting model__
+```{r}
+# Load library
+library(gbm)
+
+# Set tuning parameters
+gbmGrid <- expand.grid(.interaction.depth = seq(1, 4, by = 2),
+                       .n.trees = seq(10, 100, by = 10),
+                       .shrinkage = c(0.01, 0.1),
+                       .n.minobsinnode = 1:5)
+
+# Run the function
+GBM <- train(y ~ peace + trench + slave + god + war + time,
+             data = training,
+             trControl = ctrl,
+             tuneGrid = gbmGrid,
+             method = 'gbm',
+             verbose = FALSE)
+
+# See the performance
+confusionMatrix(predict(GBM, newdata = testing),
+                reference = testing$y)
+```
+
+Accuracy for boosting model was 0.6715. If a different learning rate was chosen, there might be improvements in accuracy. Accuracy was compromised because of the lack of computational power.
+
+
+## __Conclusion__
+
+Sentiment analysis and classification analysis of texts from two different war periods showed that the differences in the warfares are reflected in literary works.
+
+In classification model, MARS model and random forest yielded the best results. Also, adding tuning parameters improved model performance. This shows that for building a predictive model, it is important to set the rigt degree of tuning parameters and apply them.
+
+However, looking at a few key words cannot make an accurate classification of a literary work. The problem in this analysis was that there were more WWI texts than in Civil War texts. Predictive models were able to achieve the numbers because it predicted that most literary work will be classified to WWI.
+
+One model that was different was the random forest model. By making the model to choose randomly different points, it was able to yield relatively similar sensitivity and specificity around 0.7, which is to be noted. Other models had either sensitivity or specificity significantly higher than the other. In this regard, it is understandable why random forest model is often used. 
